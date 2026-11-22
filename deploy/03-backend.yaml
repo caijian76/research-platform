@@ -1,0 +1,92 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: research-platform
+  namespace: research-system
+  labels:
+    app: research-platform
+    app.kubernetes.io/part-of: research-platform
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: research-platform
+  template:
+    metadata:
+      labels:
+        app: research-platform
+    spec:
+      serviceAccountName: research-platform
+      containers:
+        - name: server
+          image: research-platform-backend:1.0.0
+          imagePullPolicy: IfNotPresent
+          envFrom:
+            - configMapRef:
+                name: research-platform-config
+          env:
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: research-platform-secrets
+                  key: POSTGRES_PASSWORD
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: research-platform-secrets
+                  key: JWT_SECRET
+            - name: SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: research-platform-secrets
+                  key: SECRET_KEY
+            - name: ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: research-platform-secrets
+                  key: ADMIN_PASSWORD
+            - name: DATABASE_URL
+              value: "postgres://research:$(POSTGRES_PASSWORD)@postgres.research-system.svc:5432/research?sslmode=disable"
+            - name: WEB_DIR
+              value: /app/web
+            - name: LISTEN_ADDR
+              value: ":8080"
+          ports:
+            - name: http
+              containerPort: 8080
+          readinessProbe:
+            httpGet:
+              path: /api/healthz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /api/healthz
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 15
+          resources:
+            requests:
+              cpu: 200m
+              memory: 256Mi
+            limits:
+              cpu: "2"
+              memory: 1Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: research-platform
+  namespace: research-system
+  labels:
+    app: research-platform
+spec:
+  type: NodePort
+  selector:
+    app: research-platform
+  ports:
+    - name: http
+      port: 8080
+      targetPort: 8080
+      nodePort: 30080

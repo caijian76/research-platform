@@ -1,0 +1,41 @@
+FROM docker.1ms.run/library/ubuntu:22.04
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    LANG=C.UTF-8 \
+    LC_ALL=C.UTF-8
+
+RUN sed -i 's@//.*archive.ubuntu.com@//mirrors.aliyun.com@g; s@//security.ubuntu.com@//mirrors.aliyun.com@g' /etc/apt/sources.list \
+ && apt-get update \
+ && apt-get install -y --no-install-recommends \
+      openssh-server \
+      tigervnc-standalone-server \
+      tigervnc-common \
+      tigervnc-tools \
+      novnc \
+      websockify \
+      openbox \
+      xterm \
+      xauth \
+      x11-xserver-utils \
+      dbus-x11 \
+      fonts-dejavu-core \
+      ca-certificates \
+      curl \
+      git \
+      vim \
+      less \
+      procps \
+      sudo \
+      iputils-ping \
+      net-tools \
+ && rm -rf /var/lib/apt/lists/* \
+ && mkdir -p /etc/xdg/openbox /usr/share/novnc \
+ && printf 'xterm -geometry 120x32 -fa Monospace -fs 11 &\n' > /etc/xdg/openbox/autostart \
+ && echo 'export LANG=C.UTF-8' >> /root/.bashrc
+
+COPY vnc-xstartup /usr/local/bin/vnc-xstartup
+COPY start-workspace.sh /usr/local/bin/start-workspace
+RUN chmod 0755 /usr/local/bin/vnc-xstartup /usr/local/bin/start-workspace
+
+EXPOSE 22 6080
+ENTRYPOINT ["/usr/local/bin/start-workspace"]

@@ -1,0 +1,10 @@
+FROM docker.1ms.run/library/alpine:3.20
+
+RUN apk add --no-cache ca-certificates tzdata
+WORKDIR /app
+COPY research-platform-server /app/research-platform-server
+COPY web /app/web
+ENV WEB_DIR=/app/web \
+    LISTEN_ADDR=:8080
+EXPOSE 8080
+ENTRYPOINT ["/app/research-platform-server"]
