@@ -98,12 +98,11 @@
           <div class="mem-line">
             <el-input-number v-model="form.mem_gib" :min="0.25" :step="1" :precision="1" /><span class="unit">GiB</span>
             <div class="shm-block">
-              <div class="shm-switch">
-                <el-tooltip content="写入SHM的内容，会占用内存，请合理分配大小，避免OOM" placement="top">
-                  <el-icon class="shm-help"><QuestionFilled /></el-icon>
-                </el-tooltip>
-                <el-switch v-model="form.shm_enabled" active-text="大shm" @change="onShmToggle" />
-              </div>
+              <span class="shm-label">大shm</span>
+              <el-tooltip content="写入SHM的内容，会占用内存，请合理分配大小，避免OOM" placement="top">
+                <el-icon class="shm-help"><QuestionFilled /></el-icon>
+              </el-tooltip>
+              <el-switch v-model="form.shm_enabled" @change="onShmToggle" />
               <template v-if="form.shm_enabled">
                 <el-input-number v-model="form.shm_mi" :min="1" :max="shmMaxMi" :step="256" :precision="0" /><span class="unit">Mi</span>
               </template>
@@ -323,10 +322,11 @@ async function remove(row) {
 .unit { margin-left: 8px; color: #6b7280; font-size: 13px; }
 .mem-line { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; width: 100%; }
 .mem-line :deep(.el-input-number) { width: 110px; }
-.shm-block { display: inline-flex; align-items: center; gap: 6px; margin-left: 8px; }
-.shm-block :deep(.el-input-number) { width: 140px; }
-.shm-switch { position: relative; display: inline-flex; align-items: center; }
-.shm-help {
-  position: absolute; top: -14px; right: -2px; font-size: 14px; color: #6b7280; cursor: help;
+.shm-block {
+  display: inline-flex; align-items: center; gap: 6px; margin-left: 12px; padding-left: 12px;
+  border-left: 1px solid #dcdfe6;
 }
+.shm-block :deep(.el-input-number) { width: 120px; }
+.shm-label { font-size: 13px; color: #374151; }
+.shm-help { font-size: 14px; color: #6b7280; cursor: help; }
 </style>
