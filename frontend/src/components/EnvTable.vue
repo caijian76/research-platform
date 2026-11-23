@@ -36,16 +36,21 @@
       <el-table-column label="创建时间" width="170">
         <template #default="{ row }">{{ fmtTime(row.created_at) }}</template>
       </el-table-column>
-      <el-table-column label="操作" width="400" fixed="right">
+      <el-table-column label="操作" width="240" fixed="right">
         <template #default="{ row }">
-          <el-button link type="primary" @click="openConnect(row)">连接</el-button>
-          <el-button v-if="row.status === 'stopped'" link type="primary" @click="openEdit(row)">编辑</el-button>
-          <el-button v-if="row.rootpv" link type="primary" title="管理环境快照"
-            @click="openSnapshots(row)">快照</el-button>
-          <el-button v-if="row.desired_state === 'running' && row.status !== 'stopped'" link @click="act(row, 'stop', '已停止，数据保留')">停止</el-button>
-          <el-button v-if="row.desired_state !== 'running' || row.status === 'stopped'" link type="success" @click="act(row, 'start', '正在启动')">启动</el-button>
-          <el-button v-if="row.status === 'running'" link @click="act(row, 'restart', '正在重启')">重启</el-button>
-          <el-button link type="danger" @click="remove(row)">删除</el-button>
+          <el-button v-if="row.desired_state === 'running' && row.status !== 'stopped'" link type="danger" @click="confirmStop(row)">停止</el-button>
+          <el-button v-else link type="success" @click="act(row, 'start', '正在启动')">启动</el-button>
+          <el-button link type="primary" :disabled="row.status !== 'running'" @click="openConnect(row)">连接</el-button>
+          <el-dropdown class="more-dropdown" trigger="click" @command="(cmd) => onMore(row, cmd)">
+            <el-button link>更多<el-icon class="el-icon--right"><ArrowDown /></el-icon></el-button>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item command="edit" :disabled="row.status !== 'stopped'">编辑</el-dropdown-item>
+                <el-dropdown-item command="snapshots" :disabled="!row.rootpv">快照</el-dropdown-item>
+                <el-dropdown-item command="remove" divided>删除</el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
         </template>
       </el-table-column>
     </el-table>
@@ -171,6 +176,12 @@ function openConnect(row) {
 function openSnapshots(row) {
   snapshotEnv.value = row
   snapshotDialog.value = true
+}
+
+function onMore(row, cmd) {
+  if (cmd === 'edit') openEdit(row)
+  else if (cmd === 'snapshots') openSnapshots(row)
+  else if (cmd === 'remove') remove(row)
 }
 
 async function loadOwnerQuota(row) {
@@ -301,6 +312,18 @@ async function act(row, action, success) {
   } catch {}
 }
 
+async function confirmStop(row) {
+  try {
+    await ElMessageBox.confirm(
+      `确定停止环境「${row.name}」吗？运行中的进程将结束，根文件系统数据保留。`,
+      '停止环境', { type: 'warning', confirmButtonText: '停止', cancelButtonText: '取消' }
+    )
+  } catch {
+    return
+  }
+  await act(row, 'stop', '已停止，数据保留')
+}
+
 async function remove(row) {
   try {
     await ElMessageBox.confirm(
@@ -315,6 +338,7 @@ async function remove(row) {
 </script>
 
 <style scoped>
+.more-dropdown { margin-left: 12px; vertical-align: middle; }
 .quota-hint {
   background: #f8fafc; border: 1px dashed #dbe3ee; border-radius: 8px;
   padding: 8px 12px; font-size: 12px; margin: 0 0 14px; color: #374151;
