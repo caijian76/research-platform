@@ -3,7 +3,7 @@
 面向科研人员的容器化科研环境平台。用户通过浏览器登录后，可以按二级单位分配的资源额度创建 RootPV（持久化根文件系统）容器环境，并通过 **SSH / WebSSH / noVNC 图形桌面** 使用。
 
 - 前端：Vue 3 + Vite + Element Plus + Pinia + xterm.js
-- 后端：Go 1.22 + 标准库 `net/http` + `client-go`
+- 后端：Go 1.24 + 标准库 `net/http` + `client-go`
 - 数据库：PostgreSQL 16
 - 运行环境：Kubernetes（RootPV 依赖 OpenFuyao RootPV 能力）
 
@@ -115,7 +115,7 @@ research-platform/
   - 至少一个节点带有标签 `openfuyao.cn/persistent-rootfs=true`；
   - Pod 会使用 `nodeSelector` 调度到该节点。
 - 构建机/节点：
-  - Go 1.22+、Node.js 18+、npm、`podman`、`kubectl`、`ctr`（需能操作 `k8s.io` containerd 命名空间）。
+  - Go 1.24+、Node.js 18+、npm、`make`、`podman`、`kubectl`、`ctr`（需能操作 `k8s.io` containerd 命名空间）。
 - 网络：
   - 可拉取 `docker.1ms.run/library/postgres:16-alpine` 与工作区镜像；
   - 集群节点可拉取工作区镜像（默认 `registry.cn-hangzhou.aliyuncs.com/jackc/ubuntu-24-allinone:v0.4.0`）。
@@ -125,6 +125,14 @@ research-platform/
 ```bash
 cd /root/research-platform
 bash scripts/build.sh
+```
+
+也可使用 Makefile（`make help` 查看全部目标）：
+
+```bash
+make build     # 等价于 scripts/build.sh
+make deploy    # 等价于 scripts/deploy.sh
+make release   # 构建并部署
 ```
 
 脚本会：
