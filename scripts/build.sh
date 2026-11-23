@@ -33,15 +33,16 @@ cp -a "$ROOT/backend/web" "$CTX/web"
 echo "==> building backend image"
 podman build -t research-platform-backend:1.0.0 -f "$ROOT/images/backend/Containerfile" "$CTX"
 
-echo "==> fetching images"
-podman pull "$WORKSPACE_IMAGE"
-podman pull docker.1ms.run/library/postgres:16-alpine
+#echo "==> fetching images"
+#podman pull "$WORKSPACE_IMAGE"
+#podman pull docker.1ms.run/library/postgres:16-alpine
 
 echo "==> importing images into k8s containerd"
 # Import one image per archive: this podman version collapses a multi-image
 # docker-archive into a single manifest whose RepoTags all point at one image,
 # which silently corrupts unrelated tags in containerd.
-for img in research-platform-backend:1.0.0 "$WORKSPACE_IMAGE" docker.1ms.run/library/postgres:16-alpine; do
+# for img in research-platform-backend:1.0.0 "$WORKSPACE_IMAGE" docker.1ms.run/library/postgres:16-alpine; do
+for img in research-platform-backend:1.0.0 ; do
   file="$DIST/images/$(echo "$img" | tr '/:@' '___').tar"
   \rm -f "$file"
   podman save --format docker-archive -o "$file" "$img" >/dev/null
