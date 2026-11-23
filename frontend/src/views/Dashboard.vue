@@ -113,7 +113,7 @@
         <div class="stat-card">
           <div class="stat-icon" style="color: #059669; background: #ecfdf5"><OfficeBuilding /></div>
           <div class="label">所属单位</div>
-          <div class="value">{{ auth.memberships.length }}</div>
+          <div class="value unit-names">{{ unitNames }}</div>
           <div class="hint">{{ auth.unitAdminUnits.length ? `管理 ${auth.unitAdminUnits.length} 个单位` : '科研人员' }}</div>
         </div>
       </div>
@@ -183,6 +183,7 @@ const loading = ref(false)
 const overview = ref({})
 const envs = ref([])
 const runningCount = computed(() => envs.value.filter((e) => e.status === 'running').length)
+const unitNames = computed(() => auth.memberships.map((m) => m.unit_name).filter(Boolean).join('、') || '未加入单位')
 
 async function load() {
   loading.value = true
@@ -213,6 +214,7 @@ onMounted(load)
 }
 .quick b { display: block; font-size: 14px; }
 .quick span { font-size: 12px; color: #6b7280; }
+.stat-card .value.unit-names { font-size: 20px; line-height: 1.35; word-break: break-all; }
 .quota-row { border-bottom: 1px solid #f1f5f9; padding: 14px 0; }
 .quota-row:last-child { border-bottom: none; }
 .quota-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
