@@ -60,6 +60,10 @@
             单个环境的 CPU/内存不能超过配额，全部环境存储合计不能超过配额；存储只能增加，启动时再校验运行资源。
           </div>
         </div>
+        <el-form-item label="容器模板">
+          <el-tag size="small" type="info">{{ editingRow.template_name || '-' }}</el-tag>
+          <span class="small muted" style="margin-left: 8px">创建后不可修改</span>
+        </el-form-item>
         <el-form-item label="环境模式">
           <el-tag size="small" :type="editingRow.rootpv ? 'success' : 'info'">{{ editingRow.rootpv ? '持久化' : '临时' }}</el-tag>
           <span class="small muted" style="margin-left: 8px">创建后不可修改</span>
