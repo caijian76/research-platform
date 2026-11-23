@@ -18,80 +18,29 @@
     </div>
 
     <div class="panel">
-      <el-table :data="envs" v-loading="loading">
-        <el-table-column label="环境" min-width="190">
-          <template #default="{ row }">
-            <div style="font-weight: 600">{{ row.name }}</div>
-            <div class="small muted">{{ row.template_name || row.image }}</div>
-          </template>
-        </el-table-column>
-        <el-table-column label="单位 / 用户" min-width="150">
-          <template #default="{ row }">
-            <div>{{ row.unit_name }}</div>
-            <div class="small muted mono">{{ row.username }}</div>
-          </template>
-        </el-table-column>
-        <el-table-column label="规格" width="170">
-          <template #default="{ row }">
-            {{ cpuCores(row.cpu_milli) }} 核 / {{ memGiB(row.mem_mi) }} GiB
-            <div class="small muted">{{ row.rootpv ? `RootPV ${gi(row.storage_gi)} GiB` : '临时根目录' }}</div>
-            <div v-if="row.shm_enabled" class="small muted">大SHM {{ row.shm_mi }} MiB</div>
-          </template>
-        </el-table-column>
-        <el-table-column label="状态" width="120">
-          <template #default="{ row }">
-            <el-tooltip :content="row.status_message || row.status" placement="top">
-              <el-tag size="small" :type="statusOf(row.status).type">{{ statusOf(row.status).label }}</el-tag>
-            </el-tooltip>
-          </template>
-        </el-table-column>
-        <el-table-column label="连接端口" width="140">
-          <template #default="{ row }">
-            <div class="mono small">SSH {{ row.node_port_ssh || '-' }}</div>
-            <div class="mono small">VNC {{ row.graphical ? (row.node_port_vnc || '-') : '未开启' }}</div>
-          </template>
-        </el-table-column>
-        <el-table-column label="创建时间" width="170">
-          <template #default="{ row }">{{ fmtTime(row.created_at) }}</template>
-        </el-table-column>
-        <el-table-column label="操作" width="400" fixed="right">
-          <template #default="{ row }">
-            <el-button link type="primary" @click="openConnect(row)">连接</el-button>
-            <el-button v-if="row.status === 'stopped'" link type="primary" @click="openEdit(row)">编辑</el-button>
-            <el-button v-if="row.rootpv" link type="primary" title="管理环境快照"
-              @click="openSnapshots(row)">快照</el-button>
-            <el-button v-if="row.status === 'running' || row.status === 'starting'" link @click="stop(row)">停止</el-button>
-            <el-button v-if="row.status === 'stopped' || row.status === 'error'" link type="success" @click="start(row)">启动</el-button>
-            <el-button v-if="row.status === 'running'" link @click="restart(row)">重启</el-button>
-            <el-button link type="danger" @click="remove(row)">删除</el-button>
-          </template>
-        </el-table-column>
-      </el-table>
-      <el-empty v-if="!loading && !envs.length" description="还没有科研环境，点击右上角创建" />
+      <EnvTable :envs="envs" :loading="loading" @reload="load" />
     </div>
 
-    <el-dialog v-model="createDialog" :title="editingEnv ? '编辑科研环境' : '新建科研环境'" width="580px" destroy-on-close>
+    <el-dialog v-model="createDialog" title="新建科研环境" width="580px" destroy-on-close>
       <el-form :model="form" label-width="100px">
         <div v-if="selectedQuota" class="quota-hint">
-          {{ editingEnv && auth.isAdmin ? `所属用户 ${editingEnv.username} 的资源配额` : '资源配额' }}：CPU {{ cpuCores(selectedQuota.cpu) }} 核 · 内存 {{ memGiB(selectedQuota.mem) }} GiB · 存储 {{ gi(selectedQuota.storage) }} GiB
+          资源配额：CPU {{ cpuCores(selectedQuota.cpu) }} 核 · 内存 {{ memGiB(selectedQuota.mem) }} GiB · 存储 {{ gi(selectedQuota.storage) }} GiB
           <span class="muted">（运行中已用 CPU {{ cpuCores(selectedQuota.used_cpu) }} 核 / 内存 {{ memGiB(selectedQuota.used_mem) }} GiB；全部环境已分配存储 {{ gi(selectedQuota.used_storage) }} GiB）</span>
           <div class="small muted" style="margin-top: 3px">
-            {{ editingEnv
-              ? '单个环境的 CPU/内存不能超过配额，全部环境存储合计不能超过配额；存储只能增加，启动时再校验运行资源。'
-              : '单个环境的 CPU/内存不能超过配额，全部环境存储合计不能超过配额；创建时不占用运行中额度，可创建多个环境，启动时再校验运行资源。' }}
+            单个环境的 CPU/内存不能超过配额，全部环境存储合计不能超过配额；创建时不占用运行中额度，可创建多个环境，启动时再校验运行资源。
           </div>
         </div>
         <el-alert v-if="quotaBlocked" type="warning" :closable="false" show-icon style="margin-bottom: 14px"
           :title="quotaBlocked" />
-        <el-form-item v-if="!editingEnv" label="所属单位" required>
-          <el-select v-model="form.unit_id" placeholder="选择单位" style="width: 100%" @change="onUnitChange">
+        <el-form-item label="所属单位" required>
+          <el-select v-model="form.unit_id" placeholder="选择单位" style="width: 100%" @change="applyTemplateDefaults">
             <el-option v-for="u in unitOptions" :key="u.id" :label="u.name" :value="u.id">
               <span>{{ u.name }}</span>
               <span class="small muted" style="float: right">CPU {{ cpuCores(u.cpu_milli) }} 核 / 内存 {{ memGiB(u.mem_mi) }} GiB</span>
             </el-option>
           </el-select>
         </el-form-item>
-        <el-form-item v-if="!editingEnv" label="容器模板" required>
+        <el-form-item label="容器模板" required>
           <el-select v-model="form.template_id" placeholder="选择模板" style="width: 100%" @change="onTemplateChange">
             <el-option v-for="t in templates" :key="t.id" :label="t.name" :value="t.id">
               <span>{{ t.name }}</span>
@@ -105,8 +54,8 @@
             {{ selectedTemplate.description }}（镜像 {{ selectedTemplate.image }}）
           </div>
         </el-form-item>
-        <el-form-item v-if="!editingEnv && selectedTemplate" label="环境模式" required>
-          <el-radio-group v-model="form.rootpv" @change="onModeChange">
+        <el-form-item v-if="selectedTemplate" label="环境模式" required>
+          <el-radio-group v-model="form.rootpv" @change="applyTemplateDefaults">
             <el-radio v-if="selectedTemplate.rootpv" :value="true">持久化</el-radio>
             <el-radio v-if="selectedTemplate.ephemeral" :value="false">临时</el-radio>
           </el-radio-group>
@@ -116,18 +65,14 @@
               : '根目录随 Pod 生命周期，删除环境后数据不保留，不占用存储配额' }}
           </div>
         </el-form-item>
-        <el-form-item v-if="editingEnv" label="环境模式">
-          <el-tag size="small" :type="editingEnv.rootpv ? 'success' : 'info'">{{ editingEnv.rootpv ? '持久化' : '临时' }}</el-tag>
-          <span class="small muted" style="margin-left: 8px">创建后不可修改</span>
-        </el-form-item>
         <el-form-item label="环境名称">
           <el-input v-model="form.name" maxlength="64" placeholder="可选，例如 分子动力学实验" />
         </el-form-item>
         <el-form-item label="root 密码">
           <el-input v-model="form.root_password" type="password" show-password maxlength="64"
-            :placeholder="editingEnv ? '留空保持原密码' : '留空自动生成 14 位随机密码'" />
+            placeholder="留空自动生成 14 位随机密码" />
           <div class="small muted" style="width: 100%; margin-top: 4px">
-            {{ editingEnv ? '留空表示不修改；新密码在下次启动后生效' : '通过环境变量 ROOT_PW 注入，用于 SSH / WebSSH 登录' }}
+            通过环境变量 ROOT_PW 注入，用于 SSH / WebSSH 登录
           </div>
         </el-form-item>
         <el-form-item label="图形化界面">
@@ -138,9 +83,9 @@
         </el-form-item>
         <el-form-item v-if="form.graphical" label="VNC 密码">
           <el-input v-model="form.vnc_password" type="password" show-password maxlength="8"
-            :placeholder="editingEnv ? '留空保持原密码' : '留空自动生成 8 位随机密码'" />
+            placeholder="留空自动生成 8 位随机密码" />
           <div class="small muted" style="width: 100%; margin-top: 4px">
-            {{ editingEnv ? '留空表示不修改；如原本未开启图形界面，开启时将自动生成密码' : '通过环境变量 VNC_PW 注入，VNC 协议最多 8 位' }}
+            通过环境变量 VNC_PW 注入，VNC 协议最多 8 位
           </div>
         </el-form-item>
         <el-form-item label="CPU" required>
@@ -163,33 +108,27 @@
           </div>
         </el-form-item>
         <el-form-item v-if="form.rootpv" label="存储" required>
-          <el-input-number v-model="form.storage_gib" :min="editingEnv ? Number(editingEnv.storage_gi) : 1" :step="5" :precision="0" /><span class="unit">GiB</span>
+          <el-input-number v-model="form.storage_gib" :min="1" :step="5" :precision="0" /><span class="unit">GiB</span>
           <div class="small muted" style="width: 100%; margin-top: 4px">
-            {{ editingEnv
-              ? `存储只能增加，不能少于当前 ${gi(editingEnv.storage_gi)} GiB；增加后后台会自动扩容 PVC`
-              : '根目录 / 下的所有修改会持久化到独立 PVC，停止或重建后保留' }}
+            根目录 / 下的所有修改会持久化到独立 PVC，停止或重建后保留
           </div>
         </el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="createDialog = false">取消</el-button>
-        <el-button type="primary" :loading="creating" :disabled="!!quotaBlocked" @click="create">{{ editingEnv ? '保存修改' : '创建环境' }}</el-button>
+        <el-button type="primary" :loading="creating" :disabled="!!quotaBlocked" @click="create">创建环境</el-button>
       </template>
     </el-dialog>
-
-    <EnvConnectDialog v-model="connectDialog" :env-id="connectEnvId" />
-    <SnapshotDialog v-model="snapshotDialog" :env="snapshotEnv" @restored="load" />
   </div>
 </template>
 
 <script setup>
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessage } from 'element-plus'
 import api from '@/api'
 import { useAuth } from '@/stores/auth'
-import { cpuCores, memGiB, gi, statusOf, fmtTime } from '@/utils'
-import EnvConnectDialog from '@/components/EnvConnectDialog.vue'
-import SnapshotDialog from '@/components/SnapshotDialog.vue'
+import { cpuCores, memGiB, gi } from '@/utils'
+import EnvTable from '@/components/EnvTable.vue'
 
 const auth = useAuth()
 const envs = ref([])
@@ -199,12 +138,6 @@ const memberships = ref([])
 const loading = ref(false)
 const createDialog = ref(false)
 const creating = ref(false)
-const editingEnv = ref(null)
-const ownerQuota = ref(null)
-const connectDialog = ref(false)
-const connectEnvId = ref(0)
-const snapshotDialog = ref(false)
-const snapshotEnv = ref(null)
 let timer = null
 
 const form = reactive({
@@ -220,7 +153,6 @@ watch(() => form.mem_gib, () => {
 const unitOptions = computed(() => units.value.map((u) => ({ ...u })))
 const selectedTemplate = computed(() => templates.value.find((t) => t.id === form.template_id))
 const selectedQuota = computed(() => {
-  if (editingEnv.value && auth.isAdmin) return ownerQuota.value
   if (!form.unit_id) return null
   if (auth.isAdmin) {
     const u = units.value.find((x) => x.id === form.unit_id)
@@ -235,7 +167,6 @@ const selectedQuota = computed(() => {
   return { cpu: m.cpu_milli, mem: m.mem_mi, storage: m.storage_gi, used_cpu: m.used_cpu_milli, used_mem: m.used_mem_mi, used_storage: m.used_storage_gi }
 })
 const quotaBlocked = computed(() => {
-  if (editingEnv.value) return ''
   const q = selectedQuota.value
   if (!q) return ''
   if (form.rootpv && (q.storage - (q.used_storage || 0)) <= 0) {
@@ -287,8 +218,6 @@ async function openCreate() {
     ElMessage.warning('您还没有加入任何单位，请联系管理员')
     return
   }
-  editingEnv.value = null
-  ownerQuota.value = null
   form.unit_id = unitOptions.value[0].id
   form.template_id = templates.value[0]?.id || null
   form.name = ''
@@ -301,53 +230,8 @@ async function openCreate() {
   form.shm_enabled = false
   form.shm_mi = 1024
   form.rootpv = true
-  onTemplateChange()
-  createDialog.value = true
-}
-
-async function openEdit(row) {
-  if (row.status !== 'stopped') {
-    ElMessage.warning('只能在环境停止后编辑')
-    return
-  }
-  try {
-    await loadOptions()
-  } catch {
-    return
-  }
-  ownerQuota.value = null
-  if (auth.isAdmin) {
-    try {
-      const members = await api.get(`/units/${row.unit_id}/members`)
-      const m = members.find((x) => x.user_id === row.user_id)
-      if (m) {
-        ownerQuota.value = {
-          cpu: m.cpu_milli, mem: m.mem_mi, storage: m.storage_gi,
-          used_cpu: m.used_cpu_milli || 0, used_mem: m.used_mem_mi || 0, used_storage: m.used_storage_gi || 0
-        }
-      }
-    } catch {}
-  }
-  editingEnv.value = row
-  Object.assign(form, {
-    unit_id: row.unit_id,
-    template_id: row.template_id,
-    name: row.name,
-    cpu_cores: Number(row.cpu_milli) / 1000,
-    mem_gib: Number(row.mem_mi) / 1024,
-    storage_gib: Number(row.storage_gi || 0),
-    root_password: '',
-    graphical: !!row.graphical,
-    vnc_password: '',
-    shm_enabled: !!row.shm_enabled,
-    shm_mi: Number(row.shm_mi) || 1024,
-    rootpv: !!row.rootpv
-  })
-  createDialog.value = true
-}
-
-function onUnitChange() {
   applyTemplateDefaults()
+  createDialog.value = true
 }
 
 function onTemplateChange() {
@@ -358,10 +242,6 @@ function onShmToggle(enabled) {
   if (enabled && (!form.shm_mi || form.shm_mi > shmMaxMi.value)) {
     form.shm_mi = Math.min(1024, shmMaxMi.value)
   }
-}
-
-function onModeChange() {
-  applyTemplateDefaults()
 }
 
 function applyTemplateDefaults() {
@@ -393,7 +273,6 @@ async function create() {
     ElMessage.warning('VNC 密码长度需为 6-8 位')
     return
   }
-  const oldStorage = Number(editingEnv.value?.storage_gi || 0)
   const cpu = Math.round(Number(form.cpu_cores) * 1000)
   const mem = Math.round(Number(form.mem_gib) * 1024)
   const shmMi = form.shm_enabled ? Math.round(Number(form.shm_mi)) : 0
@@ -407,29 +286,23 @@ async function create() {
       return
     }
   }
-  if (!editingEnv.value) {
-    const t = selectedTemplate.value
-    if (!t) {
-      ElMessage.warning('请选择容器模板')
-      return
-    }
-    if (form.rootpv && !t.rootpv) {
-      ElMessage.warning('该模板不支持持久化模式')
-      return
-    }
-    if (!form.rootpv && !t.ephemeral) {
-      ElMessage.warning('该模板不支持临时模式')
-      return
-    }
+  const t = selectedTemplate.value
+  if (!t) {
+    ElMessage.warning('请选择容器模板')
+    return
   }
-  const rootPV = editingEnv.value ? !!editingEnv.value.rootpv : !!form.rootpv
+  if (form.rootpv && !t.rootpv) {
+    ElMessage.warning('该模板不支持持久化模式')
+    return
+  }
+  if (!form.rootpv && !t.ephemeral) {
+    ElMessage.warning('该模板不支持临时模式')
+    return
+  }
+  const rootPV = !!form.rootpv
   const storage = rootPV ? Math.round(Number(form.storage_gib)) : 0
   if (rootPV && storage <= 0) {
     ElMessage.warning('持久化模式必须配置大于 0 的存储容量')
-    return
-  }
-  if (editingEnv.value && storage < oldStorage) {
-    ElMessage.warning(`存储只能增加，不能少于当前的 ${gi(oldStorage)} GiB`)
     return
   }
   const q = selectedQuota.value
@@ -438,15 +311,14 @@ async function create() {
       ElMessage.warning('单个环境的 CPU / 内存不能超过个人资源上限')
       return
     }
-    const otherStorage = Math.max(0, (q.used_storage || 0) - oldStorage)
-    if (storage > q.storage - otherStorage) {
+    if (storage > q.storage - (q.used_storage || 0)) {
       ElMessage.warning('全部环境的存储总量将超出个人上限')
       return
     }
   }
   creating.value = true
   try {
-    const payload = {
+    await api.post('/environments', {
       name: form.name,
       cpu_milli: cpu,
       mem_mi: mem,
@@ -455,55 +327,17 @@ async function create() {
       graphical: form.graphical,
       vnc_password: form.graphical ? form.vnc_password || undefined : undefined,
       shm_enabled: !!form.shm_enabled,
-      shm_mi: shmMi
-    }
-    if (editingEnv.value) {
-      await api.patch(`/environments/${editingEnv.value.id}`, payload)
-      createDialog.value = false
-      ElMessage.success('环境配置已更新，启动后生效')
-    } else {
-      await api.post('/environments', { ...payload, unit_id: form.unit_id, template_id: form.template_id, rootpv: rootPV })
-      createDialog.value = false
-      ElMessage.success('环境已创建，尚未启动；请在列表中点击「启动」后连接')
-    }
+      shm_mi: shmMi,
+      unit_id: form.unit_id,
+      template_id: form.template_id,
+      rootpv: rootPV
+    })
+    createDialog.value = false
+    ElMessage.success('环境已创建，尚未启动；请在列表中点击「启动」后连接')
     await load()
   } finally {
     creating.value = false
   }
-}
-
-function openConnect(row) {
-  connectEnvId.value = row.id
-  connectDialog.value = true
-}
-
-function openSnapshots(row) {
-  snapshotEnv.value = row
-  snapshotDialog.value = true
-}
-
-async function act(row, action, success) {
-  try {
-    await api.post(`/environments/${row.id}/${action}`)
-    ElMessage.success(success)
-    await load()
-  } catch {}
-}
-
-const stop = (row) => act(row, 'stop', '已停止，数据保留')
-const start = (row) => act(row, 'start', '正在启动')
-const restart = (row) => act(row, 'restart', '正在重启')
-
-async function remove(row) {
-  try {
-    await ElMessageBox.confirm(
-      `确定删除环境「${row.name}」吗？${row.rootpv ? '其持久化根文件系统（PVC）也会被删除，数据不可恢复。' : ''}`,
-      '删除环境', { type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消' }
-    )
-    await api.delete(`/environments/${row.id}`)
-    ElMessage.success('环境已删除')
-    await load()
-  } catch {}
 }
 
 onMounted(async () => {

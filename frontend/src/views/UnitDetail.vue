@@ -98,38 +98,11 @@
 
         <el-tab-pane label="科研环境" name="envs">
           <div class="panel">
-            <el-table :data="envs" size="default">
-              <el-table-column label="环境" min-width="180">
-                <template #default="{ row }">
-                  <div style="font-weight: 600">{{ row.name }}</div>
-                  <div class="small muted">{{ row.template_name || row.image }}</div>
-                </template>
-              </el-table-column>
-              <el-table-column label="所属用户" width="130">
-                <template #default="{ row }"><span class="mono">{{ row.username }}</span></template>
-              </el-table-column>
-              <el-table-column label="规格" width="170">
-                <template #default="{ row }">
-                  {{ cpuCores(row.cpu_milli) }} 核 / {{ memGiB(row.mem_mi) }} GiB
-                  <div class="small muted">{{ row.rootpv ? `RootPV ${gi(row.storage_gi)} GiB` : '临时' }}</div>
-                </template>
-              </el-table-column>
-              <el-table-column label="状态" width="110">
-                <template #default="{ row }">
-                  <el-tag size="small" :type="statusOf(row.status).type">{{ statusOf(row.status).label }}</el-tag>
-                </template>
-              </el-table-column>
-              <el-table-column label="操作" width="260" fixed="right">
-                <template #default="{ row }">
-                  <el-button link type="primary" @click="openConnect(row)">连接</el-button>
-                  <el-button v-if="row.status === 'running'" link @click="envAction(row, 'stop', '已停止')">停止</el-button>
-                  <el-button v-if="row.status === 'stopped' || row.status === 'error'" link type="success" @click="envAction(row, 'start', '正在启动')">启动</el-button>
-                  <el-button v-if="row.status === 'running'" link @click="envAction(row, 'restart', '正在重启')">重启</el-button>
-                  <el-button link type="danger" @click="removeEnv(row)">删除</el-button>
-                </template>
-              </el-table-column>
-            </el-table>
-            <el-empty v-if="!envs.length" description="该单位还没有科研环境" />
+            <div class="toolbar">
+              <div class="grow"></div>
+              <el-button @click="loadEnvs" :loading="envLoading"><el-icon><Refresh /></el-icon>&nbsp;刷新</el-button>
+            </div>
+            <EnvTable :envs="envs" :loading="envLoading" empty-text="该单位还没有科研环境" @reload="loadEnvs" />
           </div>
         </el-tab-pane>
       </el-tabs>
@@ -178,19 +151,17 @@
         <el-button type="primary" :loading="saving" @click="saveMember">保存</el-button>
       </template>
     </el-dialog>
-
-    <EnvConnectDialog v-model="connectDialog" :env-id="connectEnvId" />
   </div>
 </template>
 
 <script setup>
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import api from '@/api'
 import { useAuth } from '@/stores/auth'
-import { cpuCores, memGiB, gi, pct, statusOf } from '@/utils'
-import EnvConnectDialog from '@/components/EnvConnectDialog.vue'
+import { cpuCores, memGiB, gi, pct } from '@/utils'
+import EnvTable from '@/components/EnvTable.vue'
 
 const auth = useAuth()
 const route = useRoute()
@@ -201,12 +172,12 @@ const canManage = ref(false)
 const members = ref([])
 const envs = ref([])
 const loading = ref(false)
+const envLoading = ref(false)
 const tab = ref('members')
 const memberDialog = ref(false)
 const editingMember = ref(null)
 const saving = ref(false)
-const connectDialog = ref(false)
-const connectEnvId = ref(0)
+let timer = null
 const memberForm = reactive({
   username: '', password: '', display_name: '', role: 'member', cpu_cores: 2, mem_gib: 4, storage_gib: 10
 })
@@ -217,6 +188,16 @@ const memberStorageAvailable = computed(() => {
   const own = editingMember.value ? Number(editingMember.value.storage_gi || 0) : 0
   return Math.max(0, total - (allocated - own))
 })
+
+async function loadEnvs() {
+  if (!canManage.value) return
+  envLoading.value = true
+  try {
+    envs.value = await api.get(`/units/${id}/environments`)
+  } finally {
+    envLoading.value = false
+  }
+}
 
 async function load() {
   loading.value = true
@@ -311,30 +292,13 @@ async function removeMember(row) {
   } catch {}
 }
 
-function openConnect(row) {
-  connectEnvId.value = row.id
-  connectDialog.value = true
-}
-
-async function envAction(row, action, msg) {
-  try {
-    await api.post(`/environments/${row.id}/${action}`)
-    ElMessage.success(msg)
-    await load()
-  } catch {}
-}
-
-async function removeEnv(row) {
-  try {
-    await ElMessageBox.confirm(`确定删除环境「${row.name}」吗？持久化数据将一并删除。`, '删除环境',
-      { type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消' })
-    await api.delete(`/environments/${row.id}`)
-    ElMessage.success('环境已删除')
-    await load()
-  } catch {}
-}
-
-onMounted(load)
+onMounted(async () => {
+  await load()
+  timer = setInterval(() => {
+    if (document.visibilityState === 'visible' && tab.value === 'envs') loadEnvs()
+  }, 10000)
+})
+onBeforeUnmount(() => timer && clearInterval(timer))
 </script>
 
 <style scoped>
