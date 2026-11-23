@@ -313,15 +313,18 @@ async function act(row, action, success) {
 }
 
 async function confirmStop(row) {
+  const message = row.rootpv
+    ? `确定停止环境「${row.name}」吗？运行中的进程将结束，根文件系统数据保留。`
+    : `确定停止环境「${row.name}」吗？运行中的进程将结束，临时环境的根目录数据将被清除且无法恢复。`
   try {
     await ElMessageBox.confirm(
-      `确定停止环境「${row.name}」吗？运行中的进程将结束，根文件系统数据保留。`,
+      message,
       '停止环境', { type: 'warning', confirmButtonText: '停止', cancelButtonText: '取消' }
     )
   } catch {
     return
   }
-  await act(row, 'stop', '已停止，数据保留')
+  await act(row, 'stop', row.rootpv ? '已停止，数据保留' : '已停止')
 }
 
 async function remove(row) {

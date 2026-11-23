@@ -832,7 +832,10 @@ func (c *Client) PodState(ctx context.Context, e *models.Environment) (string, s
 	pod, err := c.cs.CoreV1().Pods(e.Namespace).Get(ctx, e.PodName, metav1.GetOptions{})
 	if apierrors.IsNotFound(err) {
 		if e.DesiredState == "stopped" {
-			return "stopped", "环境已停止，根文件系统数据保留。"
+			if e.RootPV {
+				return "stopped", "环境已停止，根文件系统数据保留。"
+			}
+			return "stopped", "环境已停止，临时环境数据不保留。"
 		}
 		return "pending", "Pod 尚未创建"
 	}

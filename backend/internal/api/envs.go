@@ -585,11 +585,15 @@ func (s *Server) handleStopEnvironment(w http.ResponseWriter, r *http.Request, u
 		writeError(w, http.StatusInternalServerError, "停止环境失败: "+err.Error())
 		return
 	}
+	stopMsg := "环境已停止，根文件系统数据保留。"
+	if !env.RootPV {
+		stopMsg = "环境已停止，临时环境数据不保留。"
+	}
 	_ = s.db.UpdateEnvDesired(r.Context(), env.ID, "stopped")
-	_ = s.db.UpdateEnvStatus(r.Context(), env.ID, "stopped", "环境已停止，根文件系统数据保留。")
+	_ = s.db.UpdateEnvStatus(r.Context(), env.ID, "stopped", stopMsg)
 	env.DesiredState = "stopped"
 	env.Status = "stopped"
-	env.StatusMessage = "环境已停止，根文件系统数据保留。"
+	env.StatusMessage = stopMsg
 	s.db.Audit(r.Context(), u.ID, u.Username, "stop_environment", env.Name, env.Namespace+"/"+env.PodName)
 	writeJSON(w, http.StatusOK, s.envView(r, env, true))
 }
