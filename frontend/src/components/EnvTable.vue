@@ -27,12 +27,18 @@
           </el-tooltip>
         </template>
       </el-table-column>
-      <el-table-column label="连接端口" min-width="150">
+      <el-table-column label="端口映射" min-width="250">
         <template #default="{ row }">
-          <div class="mono small">SSH {{ row.node_port_ssh || '-' }}</div>
-          <div class="mono small">VNC {{ row.graphical ? (row.node_port_vnc || '-') : '未开启' }}</div>
-          <div v-for="p in customPorts(row)" :key="p.id" class="mono small">
-            {{ p.protocol }} {{ p.container_port }} → {{ p.node_port || '-' }}
+          <div class="port-grid">
+            <div class="port-grid-head small muted">
+              <span>类型</span><span>容器内端口</span><span>NodePort</span>
+            </div>
+            <div v-for="p in row.ports || []" :key="portKey(p)" class="port-grid-row small">
+              <span><el-tag size="small" :type="portKind(p.kind).type" effect="plain">{{ portKind(p.kind).label }}</el-tag></span>
+              <span class="mono">{{ p.container_port }}</span>
+              <span class="mono">{{ p.node_port || '-' }}</span>
+            </div>
+            <div v-if="!(row.ports || []).length" class="small muted">无端口映射</div>
           </div>
         </template>
       </el-table-column>
@@ -193,8 +199,14 @@ function openSnapshots(row) {
   snapshotDialog.value = true
 }
 
-function customPorts(row) {
-  return (row.ports || []).filter((p) => p.kind === 'custom')
+function portKind(kind) {
+  if (kind === 'ssh') return { label: 'SSH', type: 'info' }
+  if (kind === 'vnc') return { label: '图形桌面', type: 'success' }
+  return { label: '自定义', type: 'primary' }
+}
+
+function portKey(p) {
+  return `${p.kind}-${p.container_port}-${p.node_port || 0}-${p.id || ''}`
 }
 
 function onMore(row, cmd) {
@@ -361,6 +373,15 @@ async function remove(row) {
 </script>
 
 <style scoped>
+.port-grid { display: inline-block; min-width: 100%; }
+.port-grid-head, .port-grid-row {
+  display: grid;
+  grid-template-columns: 76px 80px 74px;
+  align-items: center;
+  gap: 4px;
+  line-height: 22px;
+}
+.port-grid-head { margin-bottom: 2px; }
 .more-dropdown { margin-left: 12px; vertical-align: middle; }
 .quota-hint {
   background: #f8fafc; border: 1px dashed #dbe3ee; border-radius: 8px;
