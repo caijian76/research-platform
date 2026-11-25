@@ -21,6 +21,42 @@ func (s *Server) syncEnv(r *http.Request, e *models.Environment) {
 	if e.NodePortSSH != 0 || e.NodePortVNC != 0 {
 		_ = s.db.UpdateEnvNodePorts(r.Context(), e.ID, e.NodePortSSH, e.NodePortVNC)
 	}
+	e.Ports = s.buildPortMappings(r.Context(), e, s.kube.PublicHost(r.Context()))
+}
+
+// buildPortMappings assembles the built-in SSH/VNC mappings and the custom
+// user-defined port mappings into one ordered view.
+func (s *Server) buildPortMappings(ctx context.Context, e *models.Environment, host string) []models.PortMapping {
+	items := make([]models.PortMapping, 0)
+	if e.SSHPort > 0 {
+		items = append(items, models.PortMapping{
+			Kind: "ssh", Name: "SSH 终端", ContainerPort: e.SSHPort, NodePort: e.NodePortSSH,
+			Protocol: "TCP", Builtin: true, Address: portAddress(host, e.NodePortSSH),
+		})
+	}
+	if e.Graphical && e.VNCPort > 0 {
+		items = append(items, models.PortMapping{
+			Kind: "vnc", Name: "图形桌面 (noVNC)", ContainerPort: e.VNCPort, NodePort: e.NodePortVNC,
+			Protocol: "TCP", Builtin: true, Address: portAddress(host, e.NodePortVNC),
+		})
+	}
+	custom, err := s.db.ListEnvPorts(ctx, e.ID)
+	if err == nil {
+		for _, p := range custom {
+			items = append(items, models.PortMapping{
+				ID: p.ID, Kind: "custom", Name: "自定义端口", ContainerPort: p.ContainerPort,
+				NodePort: p.NodePort, Protocol: p.Protocol, Builtin: false, Address: portAddress(host, p.NodePort),
+			})
+		}
+	}
+	return items
+}
+
+func portAddress(host string, port int32) string {
+	if host == "" || port <= 0 {
+		return ""
+	}
+	return fmt.Sprintf("%s:%d", host, port)
 }
 
 func (s *Server) envView(r *http.Request, e *models.Environment, includeSecrets bool) models.EnvironmentView {

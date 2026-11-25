@@ -74,46 +74,79 @@ type Template struct {
 }
 
 type Environment struct {
-	ID             int64     `json:"id"`
-	Name           string    `json:"name"`
-	UnitID         int64     `json:"unit_id"`
-	UserID         int64     `json:"user_id"`
-	TemplateID     int64     `json:"template_id"`
-	Namespace      string    `json:"namespace"`
-	PodName        string    `json:"pod_name"`
-	PVCName        string    `json:"pvc_name"`
-	SSHService     string    `json:"ssh_service"`
-	VNCService     string    `json:"vnc_service"`
-	Image          string    `json:"image"`
-	CPUMilli       int64     `json:"cpu_milli"`
-	MemMi          int64     `json:"mem_mi"`
-	StorageGi      int64     `json:"storage_gi"`
-	RootPV         bool      `json:"rootpv"`
-	Graphical      bool      `json:"graphical"`
-	ShmEnabled     bool      `json:"shm_enabled"`
-	ShmMi          int64     `json:"shm_mi"`
-	SSHPort        int32     `json:"ssh_port"`
-	VNCPort        int32     `json:"vnc_port"`
-	NodePortSSH    int32     `json:"node_port_ssh"`
-	NodePortVNC    int32     `json:"node_port_vnc"`
-	SSHUser        string    `json:"ssh_user"`
-	SSHPasswordEnc string    `json:"-"`
-	VNCPasswordEnc string    `json:"-"`
-	DesiredState   string    `json:"desired_state"`
-	Status         string    `json:"status"`
-	StatusMessage  string    `json:"status_message"`
-	CreatedAt      time.Time `json:"created_at"`
-	UpdatedAt      time.Time `json:"updated_at"`
-	UnitName       string    `json:"unit_name,omitempty"`
-	UnitSlug       string    `json:"unit_slug,omitempty"`
-	Username       string    `json:"username,omitempty"`
-	TemplateName   string    `json:"template_name,omitempty"`
+	ID             int64         `json:"id"`
+	Name           string        `json:"name"`
+	UnitID         int64         `json:"unit_id"`
+	UserID         int64         `json:"user_id"`
+	TemplateID     int64         `json:"template_id"`
+	Namespace      string        `json:"namespace"`
+	PodName        string        `json:"pod_name"`
+	PVCName        string        `json:"pvc_name"`
+	SSHService     string        `json:"ssh_service"`
+	VNCService     string        `json:"vnc_service"`
+	Image          string        `json:"image"`
+	CPUMilli       int64         `json:"cpu_milli"`
+	MemMi          int64         `json:"mem_mi"`
+	StorageGi      int64         `json:"storage_gi"`
+	RootPV         bool          `json:"rootpv"`
+	Graphical      bool          `json:"graphical"`
+	ShmEnabled     bool          `json:"shm_enabled"`
+	ShmMi          int64         `json:"shm_mi"`
+	SSHPort        int32         `json:"ssh_port"`
+	VNCPort        int32         `json:"vnc_port"`
+	NodePortSSH    int32         `json:"node_port_ssh"`
+	NodePortVNC    int32         `json:"node_port_vnc"`
+	SSHUser        string        `json:"ssh_user"`
+	SSHPasswordEnc string        `json:"-"`
+	VNCPasswordEnc string        `json:"-"`
+	DesiredState   string        `json:"desired_state"`
+	Status         string        `json:"status"`
+	StatusMessage  string        `json:"status_message"`
+	CreatedAt      time.Time     `json:"created_at"`
+	UpdatedAt      time.Time     `json:"updated_at"`
+	UnitName       string        `json:"unit_name,omitempty"`
+	UnitSlug       string        `json:"unit_slug,omitempty"`
+	Username       string        `json:"username,omitempty"`
+	TemplateName   string        `json:"template_name,omitempty"`
+	Ports          []PortMapping `json:"ports,omitempty"`
 }
 
 type EnvironmentView struct {
 	Environment
 	SSHConnection *SSHConnection `json:"ssh,omitempty"`
 	VNCConnection *VNCConnection `json:"vnc,omitempty"`
+}
+
+// EnvPort is a user-defined container port exposed through a NodePort Service.
+type EnvPort struct {
+	ID            int64     `json:"id"`
+	EnvID         int64     `json:"env_id"`
+	ContainerPort int32     `json:"container_port"`
+	NodePort      int32     `json:"node_port"`
+	ServiceName   string    `json:"service_name"`
+	Protocol      string    `json:"protocol"`
+	CreatedAt     time.Time `json:"created_at"`
+}
+
+// PortMapping is a row in the environment port mapping view. Builtin mappings
+// (SSH / VNC) are managed by the platform and cannot be deleted.
+type PortMapping struct {
+	ID            int64  `json:"id"`
+	Kind          string `json:"kind"` // ssh | vnc | custom
+	Name          string `json:"name"`
+	ContainerPort int32  `json:"container_port"`
+	NodePort      int32  `json:"node_port"`
+	Protocol      string `json:"protocol"`
+	Builtin       bool   `json:"builtin"`
+	Address       string `json:"address"`
+}
+
+type PortListView struct {
+	Items  []PortMapping `json:"items"`
+	Max    int           `json:"max"`
+	Host   string        `json:"host"`
+	Count  int           `json:"count"`
+	CanAdd bool          `json:"can_add"`
 }
 
 type Snapshot struct {

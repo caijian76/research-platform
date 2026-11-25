@@ -31,6 +31,11 @@
   - SSH：显示主机、NodePort、用户名、root 密码及完整 SSH 命令。
   - WebSSH：浏览器内 xterm 终端，**在新标签页以全屏页面打开**。
   - noVNC：新标签页打开图形桌面，也可在连接对话框内嵌显示。
+- **端口映射**
+  - 环境列表「更多 → 端口」打开端口映射窗口，集中显示 SSH、图形桌面与自定义端口。
+  - 可添加自定义端口映射：指定容器内端口与协议（TCP/UDP），由 Kubernetes 自动分配 NodePort（不可手动指定），外部通过 `NodeIP:NodePort` 访问。
+  - SSH 与图形桌面端口为系统端口，不可删除；每个环境最多添加 5 个自定义端口映射（不占用系统端口名额）。
+  - 环境列表「连接端口」列同步显示已映射的自定义端口。
 - **命名空间隔离**
   - 平台自身组件运行在 `research-system`。
   - 每个二级单位的环境运行在独立命名空间 `research-unit-<slug>`。
@@ -67,6 +72,7 @@
 | SSH | 浏览器/终端 → `NodeIP:<ssh NodePort>` → Pod:22 |
 | WebSSH | 浏览器 WebSocket → `/api/environments/{id}/webssh` → 后端通过集群内 DNS 连接 `<pod>-ssh:22` |
 | noVNC | 浏览器 → `NodeIP:<vnc NodePort>` → Service:6080 → Pod:6901（websockify） |
+| 自定义端口 | 客户端 → `NodeIP:<自动分配 NodePort>` → Service → Pod:<容器端口>（TCP/UDP） |
 
 ---
 
@@ -343,6 +349,7 @@ RootPV 环境会：
 | `memberships` | 用户-单位关系、角色（`unit_admin` / `member`）、个人资源上限 |
 | `templates` | 容器模板：镜像、RootPV 标志、默认规格、SSH/noVNC 端口、启用状态 |
 | `environments` | 环境元数据：Pod/PVC/Service 名称、资源、端口、加密密码、期望状态与运行状态 |
+| `env_ports` | 自定义端口映射：容器端口、自动分配的 NodePort、Service 名称与协议 |
 | `snapshots` | 环境快照记录：名称、K8s VolumeSnapshot 名称、状态、大小与错误信息 |
 | `settings` | 平台集群总资源上限（单行） |
 | `audit_logs` | 操作审计日志（用户、动作、目标、详情、时间） |
@@ -374,6 +381,7 @@ kubectl -n research-system exec deploy/postgres -- \
 | 单位 | `GET /units/{id}`、`GET/POST /units/{id}/members`、`PATCH/DELETE /units/{id}/members/{uid}`、`GET /units/{id}/environments` |
 | 平台管理 | `GET /admin/overview`、`GET/PUT /admin/settings`、`GET/POST /admin/units`、`PATCH/DELETE /admin/units/{id}`、`GET/POST /admin/users`、`PATCH/DELETE /admin/users/{id}`、`GET/POST /admin/templates`、`PATCH/DELETE /admin/templates/{id}`、`GET /admin/environments`、`GET /admin/audit-logs`、`DELETE /admin/audit-logs?days=7` |
 | 快照 | `GET/POST /environments/{id}/snapshots`、`DELETE /environments/{id}/snapshots/{sid}`、`POST /environments/{id}/snapshots/{sid}/restore` |
+| 端口映射 | `GET/POST /environments/{id}/ports`、`DELETE /environments/{id}/ports/{pid}` |
 | 健康检查 | `GET /api/healthz` |
 
 > `DELETE /api/admin/audit-logs` 默认清理 7 天以前的日志，可用 `days` 指定 1–3650 天；带 `dry_run=1` 时只返回待删除条数，不执行删除。

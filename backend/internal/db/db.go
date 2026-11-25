@@ -128,6 +128,17 @@ CREATE TABLE IF NOT EXISTS environments (
 );
 CREATE INDEX IF NOT EXISTS idx_env_unit ON environments(unit_id);
 CREATE INDEX IF NOT EXISTS idx_env_user ON environments(user_id);
+CREATE TABLE IF NOT EXISTS env_ports (
+	id BIGSERIAL PRIMARY KEY,
+	env_id BIGINT NOT NULL REFERENCES environments(id) ON DELETE CASCADE,
+	container_port INT NOT NULL,
+	node_port INT NOT NULL DEFAULT 0,
+	service_name TEXT NOT NULL DEFAULT '',
+	protocol TEXT NOT NULL DEFAULT 'TCP',
+	created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_env_port_env ON env_ports(env_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_env_port_unique ON env_ports(env_id, container_port, protocol);
 CREATE TABLE IF NOT EXISTS snapshots (
 	id BIGSERIAL PRIMARY KEY,
 	env_id BIGINT NOT NULL REFERENCES environments(id) ON DELETE CASCADE,
@@ -715,6 +726,86 @@ func (d *DB) UpdateEnvironmentConfig(ctx context.Context, id int64, name string,
 func (d *DB) DeleteEnvironmentRow(ctx context.Context, id int64) error {
 	_, err := d.pool.Exec(ctx, `DELETE FROM environments WHERE id=$1`, id)
 	return err
+}
+
+// ---------- environment custom ports ----------
+
+const envPortCols = `id,env_id,container_port,node_port,service_name,protocol,created_at`
+
+func scanEnvPort(row pgx.Row) (*models.EnvPort, error) {
+	var p models.EnvPort
+	err := row.Scan(&p.ID, &p.EnvID, &p.ContainerPort, &p.NodePort, &p.ServiceName, &p.Protocol, &p.CreatedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &p, nil
+}
+
+func (d *DB) ListEnvPorts(ctx context.Context, envID int64) ([]models.EnvPort, error) {
+	rows, err := d.pool.Query(ctx, `SELECT `+envPortCols+` FROM env_ports WHERE env_id=$1 ORDER BY container_port, id`, envID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []models.EnvPort{}
+	for rows.Next() {
+		p, err := scanEnvPort(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, *p)
+	}
+	return out, rows.Err()
+}
+
+func (d *DB) CountEnvPorts(ctx context.Context, envID int64) (int, error) {
+	var n int
+	err := d.pool.QueryRow(ctx, `SELECT count(*) FROM env_ports WHERE env_id=$1`, envID).Scan(&n)
+	return n, err
+}
+
+func (d *DB) GetEnvPort(ctx context.Context, envID, id int64) (*models.EnvPort, error) {
+	return scanEnvPort(d.pool.QueryRow(ctx, `SELECT `+envPortCols+` FROM env_ports WHERE env_id=$1 AND id=$2`, envID, id))
+}
+
+func (d *DB) GetEnvPortByContainer(ctx context.Context, envID int64, containerPort int32, protocol string) (*models.EnvPort, error) {
+	return scanEnvPort(d.pool.QueryRow(ctx, `SELECT `+envPortCols+` FROM env_ports WHERE env_id=$1 AND container_port=$2 AND protocol=$3`, envID, containerPort, protocol))
+}
+
+func (d *DB) CreateEnvPort(ctx context.Context, envID int64, containerPort, nodePort int32, serviceName, protocol string) (*models.EnvPort, error) {
+	return scanEnvPort(d.pool.QueryRow(ctx, `INSERT INTO env_ports (env_id,container_port,node_port,service_name,protocol)
+		VALUES ($1,$2,$3,$4,$5) RETURNING `+envPortCols,
+		envID, containerPort, nodePort, serviceName, protocol))
+}
+
+func (d *DB) UpdateEnvPortNodePort(ctx context.Context, id int64, nodePort int32) error {
+	_, err := d.pool.Exec(ctx, `UPDATE env_ports SET node_port=$2 WHERE id=$1`, id, nodePort)
+	return err
+}
+
+func (d *DB) DeleteEnvPort(ctx context.Context, envID, id int64) error {
+	_, err := d.pool.Exec(ctx, `DELETE FROM env_ports WHERE env_id=$1 AND id=$2`, envID, id)
+	return err
+}
+
+func (d *DB) ListAllEnvPorts(ctx context.Context) ([]models.EnvPort, error) {
+	rows, err := d.pool.Query(ctx, `SELECT `+envPortCols+` FROM env_ports ORDER BY env_id, container_port, id`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []models.EnvPort{}
+	for rows.Next() {
+		p, err := scanEnvPort(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, *p)
+	}
+	return out, rows.Err()
 }
 
 // ---------- snapshots ----------

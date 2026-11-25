@@ -27,10 +27,13 @@
           </el-tooltip>
         </template>
       </el-table-column>
-      <el-table-column label="连接端口" width="140">
+      <el-table-column label="连接端口" min-width="150">
         <template #default="{ row }">
           <div class="mono small">SSH {{ row.node_port_ssh || '-' }}</div>
           <div class="mono small">VNC {{ row.graphical ? (row.node_port_vnc || '-') : '未开启' }}</div>
+          <div v-for="p in customPorts(row)" :key="p.id" class="mono small">
+            {{ p.protocol }} {{ p.container_port }} → {{ p.node_port || '-' }}
+          </div>
         </template>
       </el-table-column>
       <el-table-column label="创建时间" width="170">
@@ -46,6 +49,7 @@
             <template #dropdown>
               <el-dropdown-menu>
                 <el-dropdown-item command="edit" :disabled="row.status !== 'stopped'">编辑</el-dropdown-item>
+                <el-dropdown-item command="ports">端口</el-dropdown-item>
                 <el-dropdown-item command="snapshots" :disabled="!row.rootpv">快照</el-dropdown-item>
                 <el-dropdown-item command="remove" divided>删除</el-dropdown-item>
               </el-dropdown-menu>
@@ -128,6 +132,7 @@
     </el-dialog>
 
     <EnvConnectDialog v-model="connectDialog" :env-id="connectEnvId" />
+    <EnvPortsDialog v-model="portsDialog" :env-id="portsEnvId" :env="portsEnv" @changed="emit('reload')" />
     <SnapshotDialog v-model="snapshotDialog" :env="snapshotEnv" @restored="emit('reload')" />
   </div>
 </template>
@@ -139,6 +144,7 @@ import api from '@/api'
 import { useAuth } from '@/stores/auth'
 import { cpuCores, memGiB, gi, statusOf, fmtTime } from '@/utils'
 import EnvConnectDialog from './EnvConnectDialog.vue'
+import EnvPortsDialog from './EnvPortsDialog.vue'
 import SnapshotDialog from './SnapshotDialog.vue'
 
 defineProps({
@@ -155,6 +161,9 @@ const ownerQuota = ref(null)
 const saving = ref(false)
 const connectDialog = ref(false)
 const connectEnvId = ref(0)
+const portsDialog = ref(false)
+const portsEnvId = ref(0)
+const portsEnv = ref(null)
 const snapshotDialog = ref(false)
 const snapshotEnv = ref(null)
 
@@ -173,13 +182,24 @@ function openConnect(row) {
   connectDialog.value = true
 }
 
+function openPorts(row) {
+  portsEnvId.value = row.id
+  portsEnv.value = row
+  portsDialog.value = true
+}
+
 function openSnapshots(row) {
   snapshotEnv.value = row
   snapshotDialog.value = true
 }
 
+function customPorts(row) {
+  return (row.ports || []).filter((p) => p.kind === 'custom')
+}
+
 function onMore(row, cmd) {
   if (cmd === 'edit') openEdit(row)
+  else if (cmd === 'ports') openPorts(row)
   else if (cmd === 'snapshots') openSnapshots(row)
   else if (cmd === 'remove') remove(row)
 }

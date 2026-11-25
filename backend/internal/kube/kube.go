@@ -435,6 +435,51 @@ func (c *Client) EnsureServicesAndPod(ctx context.Context, e *models.Environment
 	return err
 }
 
+// EnsurePortService creates (or reads) a NodePort Service exposing a custom
+// container port. The NodePort is assigned automatically by Kubernetes and
+// returned to the caller. It is idempotent by service name.
+func (c *Client) EnsurePortService(ctx context.Context, e *models.Environment, svcName string, containerPort int32, protocol corev1.Protocol) (int32, error) {
+	existing, err := c.cs.CoreV1().Services(e.Namespace).Get(ctx, svcName, metav1.GetOptions{})
+	if err == nil {
+		for _, p := range existing.Spec.Ports {
+			if p.NodePort > 0 {
+				return p.NodePort, nil
+			}
+		}
+		return 0, fmt.Errorf("service %s 尚未分配 NodePort", svcName)
+	}
+	if !apierrors.IsNotFound(err) {
+		return 0, err
+	}
+	svc := &corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      svcName,
+			Namespace: e.Namespace,
+			Labels:    map[string]string{EnvLabel: e.PodName, PlatformLabel: "true", "research-port": "custom"},
+		},
+		Spec: corev1.ServiceSpec{
+			Type:     corev1.ServiceTypeNodePort,
+			Selector: map[string]string{EnvLabel: e.PodName},
+			Ports: []corev1.ServicePort{{
+				Name:       "port",
+				Port:       containerPort,
+				TargetPort: intstr.FromInt32(containerPort),
+				Protocol:   protocol,
+			}},
+		},
+	}
+	created, err := c.cs.CoreV1().Services(e.Namespace).Create(ctx, svc, metav1.CreateOptions{})
+	if err != nil {
+		return 0, err
+	}
+	for _, p := range created.Spec.Ports {
+		if p.NodePort > 0 {
+			return p.NodePort, nil
+		}
+	}
+	return 0, fmt.Errorf("service %s 创建后未分配 NodePort", svcName)
+}
+
 func (c *Client) StopEnvironment(ctx context.Context, e *models.Environment) error {
 	err := c.cs.CoreV1().Pods(e.Namespace).Delete(ctx, e.PodName, metav1.DeleteOptions{})
 	if apierrors.IsNotFound(err) {
@@ -513,6 +558,20 @@ func (c *Client) DeleteEnvironmentResources(ctx context.Context, e *models.Envir
 	for _, name := range []string{e.PodName + "-ssh", e.PodName + "-novnc"} {
 		if err := c.cs.CoreV1().Services(e.Namespace).Delete(ctx, name, metav1.DeleteOptions{}); err != nil && !apierrors.IsNotFound(err) {
 			errs = append(errs, "service "+name+": "+err.Error())
+		}
+	}
+	// Delete all custom port services belonging to this environment.
+	svcs, listErr := c.cs.CoreV1().Services(e.Namespace).List(ctx, metav1.ListOptions{
+		LabelSelector: EnvLabel + "=" + e.PodName + ",research-port=custom",
+	})
+	if listErr != nil {
+		errs = append(errs, "list custom port services: "+listErr.Error())
+	} else {
+		for i := range svcs.Items {
+			name := svcs.Items[i].Name
+			if err := c.cs.CoreV1().Services(e.Namespace).Delete(ctx, name, metav1.DeleteOptions{}); err != nil && !apierrors.IsNotFound(err) {
+				errs = append(errs, "service "+name+": "+err.Error())
+			}
 		}
 	}
 	if e.PVCName != "" {
