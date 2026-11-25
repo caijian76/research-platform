@@ -106,7 +106,10 @@ const actionLabels = {
   delete_environment: '删除环境',
   create_snapshot: '创建快照',
   delete_snapshot: '删除快照',
-  restore_snapshot: '恢复快照'
+  restore_snapshot: '恢复快照',
+  create_env_port: '添加端口映射',
+  delete_env_port: '删除端口映射',
+  delete_audit_logs: '清理审计日志'
 }
 
 const shortcuts = [
