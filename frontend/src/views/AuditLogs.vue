@@ -5,9 +5,14 @@
         <h2 class="page-title">审计日志</h2>
         <p class="page-sub">登录与平台管理操作记录，按时间倒序排列；仅平台管理员可查看</p>
       </div>
-      <el-button :loading="exporting" @click="exportCsv">
-        <el-icon><Download /></el-icon>&nbsp;导出 CSV
-      </el-button>
+      <div class="header-actions">
+        <el-button :loading="exporting" @click="exportCsv">
+          <el-icon><Download /></el-icon>&nbsp;导出 CSV
+        </el-button>
+        <el-button type="danger" plain :loading="deleting" @click="cleanup">
+          <el-icon><Delete /></el-icon>&nbsp;删除7天以前的日志
+        </el-button>
+      </div>
     </div>
 
     <div class="panel">
@@ -73,7 +78,7 @@
 
 <script setup>
 import { onMounted, reactive, ref } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import api from '@/api'
 import { fmtTime } from '@/utils'
 
@@ -144,6 +149,7 @@ const page = ref(1)
 const pageSize = ref(20)
 const loading = ref(false)
 const exporting = ref(false)
+const deleting = ref(false)
 const filters = reactive({ username: '', action: '', keyword: '' })
 const dateRange = ref([])
 
@@ -234,10 +240,45 @@ async function exportCsv() {
   }
 }
 
+async function cleanup() {
+  deleting.value = true
+  try {
+    const preview = await api.delete('/admin/audit-logs', { params: { days: 7, dry_run: 1 } })
+    const count = preview.count || 0
+    if (!count) {
+      ElMessage.info('没有 7 天以前的日志需要清理')
+      return
+    }
+    try {
+      await ElMessageBox.confirm(
+        `将永久删除 ${count} 条 7 天以前的审计日志（截止时间 ${fmtTime(preview.cutoff)}）。此操作不可恢复，确定继续吗？`,
+        '清理审计日志',
+        {
+          type: 'warning',
+          confirmButtonText: '确认删除',
+          cancelButtonText: '取消',
+          confirmButtonClass: 'el-button--danger'
+        }
+      )
+    } catch {
+      return
+    }
+    const result = await api.delete('/admin/audit-logs', { params: { days: 7 } })
+    ElMessage.success(`已删除 ${result.deleted} 条审计日志`)
+    await load()
+  } catch {} finally {
+    deleting.value = false
+  }
+}
+
 onMounted(load)
 </script>
 
 <style scoped>
+.header-actions {
+  display: flex;
+  gap: 8px;
+}
 .filter-form {
   margin-bottom: 4px;
 }

@@ -36,7 +36,7 @@
   - 每个二级单位的环境运行在独立命名空间 `research-unit-<slug>`。
 - **审计**
   - 登录、用户/单位/模板管理、环境操作、快照管理等写入 `audit_logs`。
-  - 平台管理员可在「平台管理 → 审计日志」中按操作者、操作类型、关键字和时间范围查询，并导出 CSV。
+  - 平台管理员可在「平台管理 → 审计日志」中按操作者、操作类型、关键字和时间范围查询，导出 CSV，并可一键删除 7 天以前的日志（先预览条数并二次确认）。
 
 ---
 
@@ -372,9 +372,11 @@ kubectl -n research-system exec deploy/postgres -- \
 | 模板 | `GET /templates` |
 | 环境 | `GET/POST /environments`、`GET/DELETE /environments/{id}`、`POST /environments/{id}/stop|start|restart`、`GET /environments/{id}/webssh` |
 | 单位 | `GET /units/{id}`、`GET/POST /units/{id}/members`、`PATCH/DELETE /units/{id}/members/{uid}`、`GET /units/{id}/environments` |
-| 平台管理 | `GET /admin/overview`、`GET/PUT /admin/settings`、`GET/POST /admin/units`、`PATCH/DELETE /admin/units/{id}`、`GET/POST /admin/users`、`PATCH/DELETE /admin/users/{id}`、`GET/POST /admin/templates`、`PATCH/DELETE /admin/templates/{id}`、`GET /admin/environments`、`GET /admin/audit-logs` |
+| 平台管理 | `GET /admin/overview`、`GET/PUT /admin/settings`、`GET/POST /admin/units`、`PATCH/DELETE /admin/units/{id}`、`GET/POST /admin/users`、`PATCH/DELETE /admin/users/{id}`、`GET/POST /admin/templates`、`PATCH/DELETE /admin/templates/{id}`、`GET /admin/environments`、`GET /admin/audit-logs`、`DELETE /admin/audit-logs?days=7` |
 | 快照 | `GET/POST /environments/{id}/snapshots`、`DELETE /environments/{id}/snapshots/{sid}`、`POST /environments/{id}/snapshots/{sid}/restore` |
 | 健康检查 | `GET /api/healthz` |
+
+> `DELETE /api/admin/audit-logs` 默认清理 7 天以前的日志，可用 `days` 指定 1–3650 天；带 `dry_run=1` 时只返回待删除条数，不执行删除。
 
 ---
 

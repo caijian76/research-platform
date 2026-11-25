@@ -74,3 +74,45 @@ func (s *Server) handleListAuditLogs(w http.ResponseWriter, r *http.Request, u *
 		"page_size": pageSize,
 	})
 }
+
+func (s *Server) handleDeleteAuditLogs(w http.ResponseWriter, r *http.Request, u *models.User) {
+	q := r.URL.Query()
+	days := 7
+	if raw := strings.TrimSpace(q.Get("days")); raw != "" {
+		parsed, err := strconv.Atoi(raw)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "days 必须是整数")
+			return
+		}
+		days = parsed
+	}
+	if days < 1 || days > 3650 {
+		writeError(w, http.StatusBadRequest, "days 必须在 1 到 3650 之间")
+		return
+	}
+	cutoff := time.Now().AddDate(0, 0, -days)
+	dryRun := strings.EqualFold(q.Get("dry_run"), "1") || strings.EqualFold(q.Get("dry_run"), "true")
+
+	if dryRun {
+		count, err := s.db.CountAuditLogsBefore(r.Context(), cutoff)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{
+			"days": days, "cutoff": cutoff, "count": count, "dry_run": true,
+		})
+		return
+	}
+
+	deleted, err := s.db.DeleteAuditLogsBefore(r.Context(), cutoff)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	detail := "删除 " + strconv.Itoa(int(deleted)) + " 条，截止 " + cutoff.Format("2006-01-02 15:04:05")
+	s.db.Audit(r.Context(), u.ID, u.Username, "delete_audit_logs", strconv.Itoa(days)+" 天以前的日志", detail)
+	writeJSON(w, http.StatusOK, map[string]any{
+		"days": days, "cutoff": cutoff, "deleted": deleted,
+	})
+}

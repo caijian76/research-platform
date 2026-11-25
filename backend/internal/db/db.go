@@ -927,4 +927,18 @@ func (d *DB) ListAuditLogs(ctx context.Context, f AuditLogFilter) ([]models.Audi
 	return out, total, rows.Err()
 }
 
+func (d *DB) CountAuditLogsBefore(ctx context.Context, cutoff time.Time) (int64, error) {
+	var n int64
+	err := d.pool.QueryRow(ctx, `SELECT count(*) FROM audit_logs WHERE created_at < $1`, cutoff).Scan(&n)
+	return n, err
+}
+
+func (d *DB) DeleteAuditLogsBefore(ctx context.Context, cutoff time.Time) (int64, error) {
+	tag, err := d.pool.Exec(ctx, `DELETE FROM audit_logs WHERE created_at < $1`, cutoff)
+	if err != nil {
+		return 0, err
+	}
+	return tag.RowsAffected(), nil
+}
+
 func (d *DB) Now() time.Time { return time.Now() }
