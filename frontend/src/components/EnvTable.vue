@@ -29,17 +29,11 @@
       </el-table-column>
       <el-table-column label="端口映射" min-width="250">
         <template #default="{ row }">
-          <div class="port-grid">
-            <div class="port-grid-head small muted">
-              <span>类型</span><span>容器内端口</span><span>NodePort</span>
-            </div>
-            <div v-for="p in row.ports || []" :key="portKey(p)" class="port-grid-row small">
-              <span><el-tag size="small" :type="portKind(p.kind).type" effect="plain">{{ portKind(p.kind).label }}</el-tag></span>
-              <span class="mono">{{ p.container_port }}</span>
-              <span class="mono">{{ p.node_port || '-' }}</span>
-            </div>
-            <div v-if="!(row.ports || []).length" class="small muted">无端口映射</div>
+          <div v-for="p in row.ports || []" :key="portKey(p)" class="port-grid-row small">
+            <span><el-tag size="small" :type="portKind(p.kind).type" effect="plain">{{ portKind(p.kind).label }}</el-tag></span>
+            <span class="mono">{{ p.container_port }} → {{ p.node_port || '-' }}</span>
           </div>
+          <div v-if="!(row.ports || []).length" class="small muted">无端口映射</div>
         </template>
       </el-table-column>
       <el-table-column label="创建时间" width="170">
@@ -373,15 +367,13 @@ async function remove(row) {
 </script>
 
 <style scoped>
-.port-grid { display: inline-block; min-width: 100%; }
-.port-grid-head, .port-grid-row {
+.port-grid-row {
   display: grid;
-  grid-template-columns: 76px 80px 74px;
+  grid-template-columns: 76px auto;
   align-items: center;
-  gap: 4px;
+  gap: 8px;
   line-height: 22px;
 }
-.port-grid-head { margin-bottom: 2px; }
 .more-dropdown { margin-left: 12px; vertical-align: middle; }
 .quota-hint {
   background: #f8fafc; border: 1px dashed #dbe3ee; border-radius: 8px;
