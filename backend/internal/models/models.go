@@ -128,6 +128,16 @@ type Snapshot struct {
 	CreatedAt   time.Time `json:"created_at"`
 }
 
+type AuditLog struct {
+	ID        int64     `json:"id"`
+	UserID    int64     `json:"user_id"`
+	Username  string    `json:"username"`
+	Action    string    `json:"action"`
+	Target    string    `json:"target"`
+	Detail    string    `json:"detail"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
 type SSHConnection struct {
 	Host     string `json:"host"`
 	Port     int32  `json:"port"`

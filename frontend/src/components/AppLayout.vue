@@ -40,6 +40,9 @@
           <el-menu-item index="/settings">
             <el-icon><Setting /></el-icon><span>平台设置</span>
           </el-menu-item>
+          <el-menu-item index="/audit-logs">
+            <el-icon><Document /></el-icon><span>审计日志</span>
+          </el-menu-item>
         </template>
       </el-menu>
       <div class="sidebar-footer">v1.0 · K8s + RootPV</div>
@@ -89,6 +92,7 @@ const titles = {
   users: '用户管理',
   templates: '容器模板',
   settings: '平台设置',
+  'audit-logs': '审计日志',
   password: '修改密码'
 }
 const pageTitle = computed(() => titles[route.name] || '科研云平台')

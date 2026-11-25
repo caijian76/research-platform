@@ -92,6 +92,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("PATCH /api/admin/templates/{id}", s.withAdmin(s.handleUpdateTemplate))
 	mux.HandleFunc("DELETE /api/admin/templates/{id}", s.withAdmin(s.handleDeleteTemplate))
 	mux.HandleFunc("GET /api/admin/environments", s.withAdmin(s.handleAdminListEnvironments))
+	mux.HandleFunc("GET /api/admin/audit-logs", s.withAdmin(s.handleListAuditLogs))
 
 	mux.Handle("/", s.webFS)
 	return logMiddleware(mux)

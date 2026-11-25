@@ -35,7 +35,8 @@
   - 平台自身组件运行在 `research-system`。
   - 每个二级单位的环境运行在独立命名空间 `research-unit-<slug>`。
 - **审计**
-  - 登录、用户/单位/模板管理、环境操作等写入 `audit_logs`。
+  - 登录、用户/单位/模板管理、环境操作、快照管理等写入 `audit_logs`。
+  - 平台管理员可在「平台管理 → 审计日志」中按操作者、操作类型、关键字和时间范围查询，并导出 CSV。
 
 ---
 
@@ -85,7 +86,7 @@ research-platform/
 │   └── web/                     # 前端构建产物（Vite 输出，后端静态托管）
 ├── frontend/                    # Vue 3 前端
 │   └── src/
-│       ├── views/               # 工作台、科研环境、单位、用户、模板、WebSSH 等
+│       ├── views/               # 工作台、科研环境、单位、用户、模板、WebSSH、审计日志等
 │       ├── components/          # 布局、连接对话框
 │       ├── router/              # 路由与登录守卫
 │       └── stores/              # Pinia 认证状态
@@ -342,8 +343,9 @@ RootPV 环境会：
 | `memberships` | 用户-单位关系、角色（`unit_admin` / `member`）、个人资源上限 |
 | `templates` | 容器模板：镜像、RootPV 标志、默认规格、SSH/noVNC 端口、启用状态 |
 | `environments` | 环境元数据：Pod/PVC/Service 名称、资源、端口、加密密码、期望状态与运行状态 |
+| `snapshots` | 环境快照记录：名称、K8s VolumeSnapshot 名称、状态、大小与错误信息 |
 | `settings` | 平台集群总资源上限（单行） |
-| `audit_logs` | 操作审计日志 |
+| `audit_logs` | 操作审计日志（用户、动作、目标、详情、时间） |
 
 说明：
 
@@ -370,7 +372,8 @@ kubectl -n research-system exec deploy/postgres -- \
 | 模板 | `GET /templates` |
 | 环境 | `GET/POST /environments`、`GET/DELETE /environments/{id}`、`POST /environments/{id}/stop|start|restart`、`GET /environments/{id}/webssh` |
 | 单位 | `GET /units/{id}`、`GET/POST /units/{id}/members`、`PATCH/DELETE /units/{id}/members/{uid}`、`GET /units/{id}/environments` |
-| 平台管理 | `GET /admin/overview`、`GET/PUT /admin/settings`、`GET/POST /admin/units`、`PATCH/DELETE /admin/units/{id}`、`GET/POST /admin/users`、`PATCH /admin/users/{id}`、`GET/POST /admin/templates`、`PATCH/DELETE /admin/templates/{id}`、`GET /admin/environments` |
+| 平台管理 | `GET /admin/overview`、`GET/PUT /admin/settings`、`GET/POST /admin/units`、`PATCH/DELETE /admin/units/{id}`、`GET/POST /admin/users`、`PATCH/DELETE /admin/users/{id}`、`GET/POST /admin/templates`、`PATCH/DELETE /admin/templates/{id}`、`GET /admin/environments`、`GET /admin/audit-logs` |
+| 快照 | `GET/POST /environments/{id}/snapshots`、`DELETE /environments/{id}/snapshots/{sid}`、`POST /environments/{id}/snapshots/{sid}/restore` |
 | 健康检查 | `GET /api/healthz` |
 
 ---
@@ -432,7 +435,7 @@ kubectl -n research-system rollout status deployment/research-platform
 - noVNC 完整地址中带 VNC 密码查询参数，便于一键打开；请仅在可信环境中分享。
 - WebSSH 校验 JWT 与环境访问权限，并限制 WebSocket 同源连接。
 - 当前通过 NodePort 直接暴露服务，未内置 TLS。生产环境建议增加 Ingress/LoadBalancer 与 HTTPS。
-- 审计日志记录了关键管理操作；当前未提供独立审计查询页面，可通过数据库查看。
+- 审计日志记录了关键管理操作；平台管理员可通过「审计日志」页面或 `GET /api/admin/audit-logs` 查询，并导出 CSV。
 
 ---
 

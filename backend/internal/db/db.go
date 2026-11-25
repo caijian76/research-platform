@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -851,6 +853,78 @@ func (d *DB) SetPlatformLimits(ctx context.Context, l models.PlatformLimits) err
 func (d *DB) Audit(ctx context.Context, userID int64, username, action, target, detail string) {
 	_, _ = d.pool.Exec(ctx, `INSERT INTO audit_logs (user_id,username,action,target,detail) VALUES ($1,$2,$3,$4,$5)`,
 		userID, username, action, target, detail)
+}
+
+type AuditLogFilter struct {
+	Username string
+	Action   string
+	Keyword  string
+	From     *time.Time
+	To       *time.Time
+	Page     int
+	PageSize int
+}
+
+func (d *DB) ListAuditLogs(ctx context.Context, f AuditLogFilter) ([]models.AuditLog, int64, error) {
+	args := []any{}
+	expand := func(expr string, values ...any) string {
+		for _, v := range values {
+			args = append(args, v)
+			expr = strings.Replace(expr, "?", "$"+strconv.Itoa(len(args)), 1)
+		}
+		return expr
+	}
+	where := []string{"1=1"}
+	if f.Username != "" {
+		where = append(where, expand("username ILIKE ?", "%"+f.Username+"%"))
+	}
+	if f.Action != "" {
+		where = append(where, expand("action = ?", f.Action))
+	}
+	if f.Keyword != "" {
+		kw := "%" + f.Keyword + "%"
+		where = append(where, expand("(username ILIKE ? OR action ILIKE ? OR target ILIKE ? OR detail ILIKE ?)", kw, kw, kw, kw))
+	}
+	if f.From != nil {
+		where = append(where, expand("created_at >= ?", *f.From))
+	}
+	if f.To != nil {
+		where = append(where, expand("created_at <= ?", *f.To))
+	}
+	clause := strings.Join(where, " AND ")
+
+	var total int64
+	if err := d.pool.QueryRow(ctx, "SELECT count(*) FROM audit_logs WHERE "+clause, args...).Scan(&total); err != nil {
+		return nil, 0, err
+	}
+	if f.Page < 1 {
+		f.Page = 1
+	}
+	if f.PageSize < 1 {
+		f.PageSize = 20
+	}
+	if f.PageSize > 500 {
+		f.PageSize = 500
+	}
+	queryArgs := append(append([]any{}, args...), f.PageSize, (f.Page-1)*f.PageSize)
+	limitIdx, offsetIdx := len(queryArgs)-1, len(queryArgs)
+	rows, err := d.pool.Query(ctx,
+		"SELECT id,user_id,username,action,target,detail,created_at FROM audit_logs WHERE "+clause+
+			" ORDER BY created_at DESC, id DESC LIMIT $"+strconv.Itoa(limitIdx)+" OFFSET $"+strconv.Itoa(offsetIdx),
+		queryArgs...)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer rows.Close()
+	out := []models.AuditLog{}
+	for rows.Next() {
+		var l models.AuditLog
+		if err := rows.Scan(&l.ID, &l.UserID, &l.Username, &l.Action, &l.Target, &l.Detail, &l.CreatedAt); err != nil {
+			return nil, 0, err
+		}
+		out = append(out, l)
+	}
+	return out, total, rows.Err()
 }
 
 func (d *DB) Now() time.Time { return time.Now() }

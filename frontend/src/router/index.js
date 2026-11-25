@@ -15,6 +15,7 @@ const routes = [
       { path: 'users', name: 'users', component: () => import('@/views/Users.vue'), meta: { admin: true } },
       { path: 'templates', name: 'templates', component: () => import('@/views/Templates.vue'), meta: { admin: true } },
       { path: 'settings', name: 'settings', component: () => import('@/views/Settings.vue'), meta: { admin: true } },
+      { path: 'audit-logs', name: 'audit-logs', component: () => import('@/views/AuditLogs.vue'), meta: { admin: true } },
       { path: 'password', name: 'password', component: () => import('@/views/Password.vue') }
     ]
   },
