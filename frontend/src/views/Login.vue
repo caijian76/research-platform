@@ -4,7 +4,7 @@
       <div class="brand" style="border: none; padding: 0; height: auto">
         <div class="logo">科</div>
         <div>
-          <div class="name" style="font-size: 17px">科研云平台</div>
+          <div class="name" style="font-size: 17px">科研云平台(容器版)</div>
           <div class="env">Research Cloud Platform</div>
         </div>
       </div>

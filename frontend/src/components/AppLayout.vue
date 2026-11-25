@@ -4,8 +4,8 @@
       <div class="brand">
         <div class="logo">科</div>
         <div>
-          <div class="name">科研云平台</div>
-          <div class="env">Research Cloud · RootPV</div>
+          <div class="name">科研云平台(容器版)</div>
+          <div class="env">Research Cloud · Container</div>
         </div>
       </div>
       <el-menu :default-active="activePath" router background-color="transparent" text-color="#cbd5e1">
@@ -45,7 +45,7 @@
           </el-menu-item>
         </template>
       </el-menu>
-      <div class="sidebar-footer">v1.0 · K8s + RootPV</div>
+      <div class="sidebar-footer">v1.0 · K8s</div>
     </aside>
 
     <div class="main">
@@ -95,7 +95,7 @@ const titles = {
   'audit-logs': '审计日志',
   password: '修改密码'
 }
-const pageTitle = computed(() => titles[route.name] || '科研云平台')
+const pageTitle = computed(() => titles[route.name] || '科研云平台(容器版)')
 const activePath = computed(() => {
   if (route.name === 'unit') return route.path
   return route.path
