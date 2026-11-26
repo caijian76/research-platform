@@ -20,13 +20,13 @@
       <div class="conn-grid" :class="{ single: !env.graphical }">
         <div class="panel inner">
           <div class="conn-head">
-            <h4><el-icon><Terminal /></el-icon> SSH 直连</h4>
+            <h4><el-icon><Document /></el-icon> 文本界面 (SSH)</h4>
             <el-tag size="small" type="info" effect="plain">命令行</el-tag>
           </div>
           <p class="small muted">支持任意 SSH 客户端，也可在新标签页打开浏览器终端</p>
           <div class="conn-actions">
             <el-button type="primary" :disabled="env.status !== 'running'" @click="openWebSSH">
-              <el-icon><Terminal /></el-icon>&nbsp;WebSSH 终端
+              <el-icon><TopRight /></el-icon>&nbsp;WebSSH 终端
             </el-button>
           </div>
           <div class="code-box">
@@ -95,7 +95,7 @@ import api from '@/api'
 import { copyText, cpuCores, memGiB, gi, statusOf, fmtTime } from '@/utils'
 
 const props = defineProps({ modelValue: Boolean, envId: Number })
-defineEmits(['update:modelValue'])
+const emit = defineEmits(['update:modelValue'])
 
 const env = ref(null)
 const loading = ref(false)
@@ -140,13 +140,21 @@ async function copy(text) {
   if (await copyText(text)) ElMessage.success('已复制')
 }
 
+function closeDialog() {
+  emit('update:modelValue', false)
+}
+
 function openVNC() {
-  if (env.value?.vnc?.url) window.open(env.value.vnc.url, '_blank')
+  const url = env.value?.vnc?.url
+  if (!url) return
+  window.open(url, '_blank')
+  closeDialog()
 }
 
 function openWebSSH() {
   if (!env.value?.id) return
   window.open(`/webssh/${env.value.id}`, '_blank', 'noopener')
+  closeDialog()
 }
 
 defineExpose({ reload: load })
