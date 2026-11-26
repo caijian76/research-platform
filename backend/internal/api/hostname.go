@@ -17,6 +17,18 @@ const maxHostnameLen = 48
 
 var hostnameRe = regexp.MustCompile(`^[a-z0-9]([-a-z0-9]*[a-z0-9])?$`)
 
+// 平台会为每个环境派生一批资源名：
+//
+//	<名>-ssh / <名>-novnc        Service（NodePort）
+//	<名>-rootfs                  PVC
+//	<名>-tcp<端口> / <名>-udp<端口>  自定义端口映射的 Service
+//
+// 主机名若以这些后缀结尾，就会与「另一个环境派生出来的名字」撞车：
+// 比如已有环境 foo 时再建一个叫 foo-ssh 的环境，其 headless Service 名
+// 正好等于 foo 的 SSH Service，启动时必然 AlreadyExists。这类冲突在创建
+// 阶段无法靠集群查重发现（Service 要等启动才创建），所以直接禁止。
+var reservedSuffixRe = regexp.MustCompile(`-(ssh|novnc|tcp[0-9]+|udp[0-9]+)$`)
+
 // validateHostname 校验用户填写的主机名，空字符串表示交给平台自动生成。
 func validateHostname(name string) error {
 	if name == "" {
@@ -27,6 +39,9 @@ func validateHostname(name string) error {
 	}
 	if !hostnameRe.MatchString(name) {
 		return fmt.Errorf("主机名称只能使用小写字母、数字和连字符（-），且需以字母或数字开头结尾")
+	}
+	if reservedSuffixRe.MatchString(name) {
+		return fmt.Errorf("主机名称不能以 -ssh、-novnc、-tcp<端口>、-udp<端口> 结尾，会与平台派生的服务名冲突")
 	}
 	return nil
 }
