@@ -19,10 +19,9 @@ spec:
       serviceAccountName: research-platform
       containers:
         - name: server
-          image: ghcr.io/caijian76/research-platform-backend:edge
-          # edge 是可变标签，若沿用 IfNotPresent，节点会继续用旧镜像；必须 Always。
-          # 若改用不可变标签（sha-<提交> 或 @sha256:digest），可安全改回 IfNotPresent。
-          imagePullPolicy: Always
+          # 版本标签由 CI 在打 tag / 发 Release 时产出，内容不可变，用 IfNotPresent 即可。
+          image: ghcr.io/caijian76/research-platform-backend:0.1.0
+          imagePullPolicy: IfNotPresent
           envFrom:
             - configMapRef:
                 name: research-platform-config

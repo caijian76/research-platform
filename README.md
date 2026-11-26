@@ -192,7 +192,7 @@ http://<NodeIP>:30080
 
 本仓库的容器包为 **public**，集群可匿名拉取，无需 `imagePullSecrets`。
 
-镜像标签的用途：`latest` 与 `1.2.3` / `1.2` 这类标签只在发版时产生，适合稳定部署；`sha-<提交>` 不可变，适合精确回溯。旧的 `edge` / `main` 标签来自先前"每次 push 都构建"的配置，**已停止更新**——`deploy/03-backend.yaml` 目前仍指向 `:edge`，下次发版后应改为版本标签（此时 `imagePullPolicy` 可视情况改回 `IfNotPresent`）。
+镜像标签的用途：`latest` 与 `0.1.0` / `0.1` 这类标签只在发版时产生，适合稳定部署；`sha-<提交>` 不可变，适合精确回溯。`deploy/03-backend.yaml` 当前使用 `0.1.0` 并配 `imagePullPolicy: IfNotPresent`。旧的 `edge` / `main` 标签来自先前"每次 push 都构建"的配置，已停止更新，不要继续引用。
 
 > 若把包可见性改为 Private，才需要创建 pull secret：`kubectl -n research-system create secret docker-registry ghcr-pull --docker-server=ghcr.io --docker-username=<GitHub 用户名> --docker-password=<带 read:packages 权限的 PAT>`，并在清单中补 `imagePullSecrets: [{name: ghcr-pull}]`。
 
@@ -283,6 +283,7 @@ kubectl -n research-system rollout restart deployment/research-platform
 ### 新建科研环境
 
 - **所属单位 / 容器模板**：决定命名空间、镜像和默认规格；表单会按模板默认值与个人静态配额自动钳制，存储默认值同时受剩余存储额度约束。
+- **主机名称**：即容器 Pod 名称，需符合 DNS-1123 label —— 只能用小写字母、数字和连字符，以字母或数字开头结尾，最长 48 位（给 `-rootfs` / `-ssh` / `-novnc` 等派生名称留出余量）。留空按「用户名-5 位 hash」自动生成（用户名会转小写、非法字符替换为连字符，例如 `yf-admin-fdc80`）。同一单位（命名空间）内不允许重名，冲突返回 409；创建后不可修改。
 - **root 密码**：6–64 位；留空自动生成 14 位随机密码，通过 `ROOT_PW` 注入。
 - **图形化界面**：
   - 开启（默认）：显示 VNC 密码输入框；留空自动生成 8 位密码；容器 `SERVICES=sshd,vnc,websockify`。
@@ -295,7 +296,7 @@ kubectl -n research-system rollout restart deployment/research-platform
 ### 编辑科研环境
 
 - 仅当环境处于「已停止」且 Pod 已关闭时可编辑；运行中、启动中、异常状态不显示编辑入口，后端也会拒绝。
-- 编辑表单与新建一致，但不显示「所属单位」和「容器模板」，二者不可修改。
+- 编辑表单与新建一致，但不显示「所属单位」和「容器模板」，二者不可修改；「主机名称」只读展示，因为 Pod / PVC / Service 的名称创建后无法变更。
 - root / VNC 密码留空表示保持原密码；填写新值后仅对下次启动的容器生效。若原本未开启图形界面，编辑时开启且 VNC 密码留空会自动生成新密码。
 - CPU / 内存可按个人静态配额调整，启动时仍会校验运行中资源合计。
 - 存储只能增加、不能减少；调整后重新统计个人与单位的环境存储总量并校验额度。存储增加时后端会对 RootPV PVC 执行扩容，文件系统扩容在下次启动挂载时完成。
@@ -325,7 +326,7 @@ kubectl -n research-system rollout restart deployment/research-platform
 | `VNC_PW` | VNC 密码（仅图形化环境） |
 | `VNC_GEOMETRY` | 图形分辨率，默认 `1440x900` |
 | `SERVICES` | 需要启动的服务：`sshd` 或 `sshd,vnc,websockify` |
-| `WORKSPACE_NAME` | 环境名称 |
+| `WORKSPACE_NAME` | 主机名（即环境名称，同时是 Pod 名称） |
 
 镜像约定：
 
