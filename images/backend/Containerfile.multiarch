@@ -1,0 +1,64 @@
+# syntax=docker/dockerfile:1.7
+#
+# 多架构镜像构建（CI 专用）。构建上下文必须是仓库根目录：
+#
+#   docker buildx build --platform linux/amd64,linux/arm64 \
+#     -f images/backend/Containerfile.multiarch .
+#
+# 与 images/backend/Containerfile 的区别：那个是"预编译产物打包"，
+# 供 scripts/build.sh（本地 podman + ctr 导入）使用；本文件自包含，
+# 在容器内完成前后端编译，因此可以一次构建出多架构镜像。
+# 两者修改基础镜像时需要同步。
+
+ARG NODE_IMAGE=node:22-alpine
+ARG GO_IMAGE=golang:1.24-alpine
+ARG RUNTIME_IMAGE=alpine:3.20
+
+# ---------- 前端构建（在构建机原生平台执行，无需模拟） ----------
+FROM --platform=$BUILDPLATFORM ${NODE_IMAGE} AS frontend
+
+WORKDIR /src/frontend
+
+# 先只拷贝依赖清单，让 npm 层可以命中缓存
+COPY frontend/package.json frontend/package-lock.json ./
+RUN npm ci --no-audit --no-fund
+
+COPY frontend/ ./
+# vite.config.js 中 outDir = ../backend/web，产物落在 /src/backend/web
+RUN npm run build
+
+# ---------- 后端编译（交叉编译，不依赖 QEMU） ----------
+FROM --platform=$BUILDPLATFORM ${GO_IMAGE} AS backend
+
+ARG TARGETOS=linux
+ARG TARGETARCH
+
+# 模块代理可覆盖；国内网络构建时传：
+#   --build-arg GOPROXY=https://goproxy.cn,direct
+ARG GOPROXY=https://proxy.golang.org,direct
+ENV GOPROXY=${GOPROXY}
+
+WORKDIR /src/backend
+
+COPY backend/go.mod backend/go.sum ./
+RUN go mod download
+
+COPY backend/ ./
+RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
+      go build -trimpath -ldflags "-s -w" -o /out/research-platform-server ./cmd/server
+
+# ---------- 运行时 ----------
+FROM ${RUNTIME_IMAGE} AS runtime
+
+RUN apk add --no-cache ca-certificates tzdata
+
+WORKDIR /app
+COPY --from=backend  /out/research-platform-server /app/research-platform-server
+COPY --from=frontend /src/backend/web            /app/web
+
+ENV WEB_DIR=/app/web \
+    LISTEN_ADDR=:8080
+
+EXPOSE 8080
+
+ENTRYPOINT ["/app/research-platform-server"]

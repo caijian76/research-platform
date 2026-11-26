@@ -1,0 +1,15 @@
+# 构建上下文瘦身：CI 多架构构建只需要源码
+.git
+.github
+dist
+backend/web
+frontend/node_modules
+**/node_modules
+*.log
+.DS_Store
+.env
+.env.*
+deploy
+scripts
+README.md
+Makefile

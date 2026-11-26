@@ -176,6 +176,31 @@ http://<NodeIP>:30080
 
 > 生产环境请立即修改 `deploy/02-secrets-config.yaml` 中的 `ADMIN_PASSWORD`、`JWT_SECRET`、`SECRET_KEY`、`POSTGRES_PASSWORD` 后再首次部署，并在平台内修改管理员密码。
 
+### CI：预发布镜像
+
+`.github/workflows/build-pre-release.yml` 在推送时自动构建 **linux/amd64 + linux/arm64** 多架构镜像并推送到 GHCR。
+
+| 触发 | 产出标签 |
+|---|---|
+| push 到 `main` | `edge`、`main`、`sha-<7位>` |
+| push 标签 `v1.2.3-rc1` | `1.2.3-rc1`、`1.2`、`sha-<7位>` |
+| 手动触发（Actions → Run workflow） | 自定义标签，默认 `edge` |
+
+镜像地址：`ghcr.io/<owner>/research-platform-backend`。预发布构建**不产出 `latest`**（`flavor: latest=false`），避免预发布镜像覆盖正式版本。
+
+构建使用 `images/backend/Containerfile.multiarch`：自包含多阶段构建（Node 出前端 → Go 交叉编译 → alpine 运行），构建上下文为仓库根目录，`node_modules`、`backend/web`、`dist` 等由 `.dockerignore` 排除。本地 `scripts/build.sh`（podman + `ctr` 导入）继续使用 `images/backend/Containerfile`，两者修改基础镜像时需同步。
+
+GHCR 镜像默认私有，集群拉取前需要创建 pull secret：
+
+```bash
+kubectl -n research-system create secret docker-registry ghcr-pull \
+  --docker-server=ghcr.io \
+  --docker-username=<GitHub 用户名> \
+  --docker-password=<带 read:packages 权限的 PAT>
+```
+
+然后在 `deploy/03-backend.yaml` 的 Pod spec 中加上 `imagePullSecrets: [{name: ghcr-pull}]`，并把 `image` 指向 `ghcr.io/<owner>/research-platform-backend:<tag>`。
+
 ### 冒烟测试
 
 1. 平台管理员登录 → 平台设置：确认集群总资源上限。
