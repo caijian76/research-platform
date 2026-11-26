@@ -36,6 +36,7 @@ const (
 	UserLabel      = "research-user"
 	QuotaName      = "research-unit-quota"
 	LimitRangeName = "research-unit-limits"
+	HeadlessLabel  = "research-headless"
 	rootPVNodeKey  = "openfuyao.cn/persistent-rootfs"
 )
 
@@ -348,8 +349,11 @@ func (c *Client) buildPod(e *models.Environment, sshPassword, vncPassword string
 	return pod
 }
 
-// EnvironmentNameTaken 检查命名空间里是否已有同名 Pod 或 RootPV 的 PVC。
+// EnvironmentNameTaken 检查命名空间里是否已有同名 Pod、RootPV 的 PVC 或 Service。
 // 用于在创建环境前拦下「主机名在集群中已被占用」的情况，避免直接抛 AlreadyExists。
+//
+// Service 也要查：主机名同时是 headless Service 的名字，而其他环境会派生
+// <名>-ssh / <名>-novnc，用户完全可以用「别人的服务名」当主机名。
 func (c *Client) EnvironmentNameTaken(ctx context.Context, namespace, podName string) (bool, error) {
 	if _, err := c.cs.CoreV1().Pods(namespace).Get(ctx, podName, metav1.GetOptions{}); err == nil {
 		return true, nil
@@ -360,6 +364,13 @@ func (c *Client) EnvironmentNameTaken(ctx context.Context, namespace, podName st
 		return true, nil
 	} else if !apierrors.IsNotFound(err) {
 		return false, err
+	}
+	for _, svcName := range []string{podName, podName + "-ssh", podName + "-novnc"} {
+		if _, err := c.cs.CoreV1().Services(namespace).Get(ctx, svcName, metav1.GetOptions{}); err == nil {
+			return true, nil
+		} else if !apierrors.IsNotFound(err) {
+			return false, err
+		}
 	}
 	return false, nil
 }
@@ -418,8 +429,55 @@ func (c *Client) ensureService(ctx context.Context, e *models.Environment, name 
 	return c.cs.CoreV1().Services(e.Namespace).Create(ctx, svc, metav1.CreateOptions{})
 }
 
+// ensureHeadlessService 为环境创建与主机名同名的 headless Service，使同一单位
+// （命名空间）内的其他环境能直接用「主机名」解析到该 Pod 的 IP。
+//
+// 必须是 headless：普通 ClusterIP 由 kube-proxy 只在 TCP/UDP 上做 DNAT，
+// 发往 ClusterIP 的 ICMP 会被内核回 port unreachable，ping 不通。
+// clusterIP: None 时 DNS 直接返回 Pod IP，不经过 VIP。
+//
+// PublishNotReadyAddresses 必须开：否则环境刚启动、readiness 未通过的几十秒内
+// 该 Pod 不在 endpoints 里，其他环境会解析失败，看起来像环境有问题。
+func (c *Client) ensureHeadlessService(ctx context.Context, e *models.Environment) error {
+	if _, err := c.cs.CoreV1().Services(e.Namespace).Get(ctx, e.PodName, metav1.GetOptions{}); err == nil {
+		return nil
+	} else if !apierrors.IsNotFound(err) {
+		return err
+	}
+	svc := &corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      e.PodName,
+			Namespace: e.Namespace,
+			Labels: map[string]string{
+				EnvLabel:      e.PodName,
+				PlatformLabel: "true",
+				HeadlessLabel: "true",
+			},
+		},
+		Spec: corev1.ServiceSpec{
+			ClusterIP: corev1.ClusterIPNone,
+			Selector:  map[string]string{EnvLabel: e.PodName},
+			// 端口仅用于满足 Service 校验，域名解析与 ICMP 不依赖它。
+			PublishNotReadyAddresses: true,
+			Ports: []corev1.ServicePort{{
+				Name:       "ssh",
+				Port:       22,
+				TargetPort: intstr.FromInt32(e.SSHPort),
+				Protocol:   corev1.ProtocolTCP,
+			}},
+		},
+	}
+	if _, err := c.cs.CoreV1().Services(e.Namespace).Create(ctx, svc, metav1.CreateOptions{}); err != nil && !apierrors.IsAlreadyExists(err) {
+		return err
+	}
+	return nil
+}
+
 // EnsureServicesAndPod brings a stopped environment back to running.
 func (c *Client) EnsureServicesAndPod(ctx context.Context, e *models.Environment, sshPassword, vncPassword string) error {
+	if err := c.ensureHeadlessService(ctx, e); err != nil {
+		return err
+	}
 	sshSvc, err := c.ensureService(ctx, e, "ssh", e.SSHPort, 22)
 	if err != nil {
 		return err
@@ -571,7 +629,8 @@ func (c *Client) DeleteEnvironmentResources(ctx context.Context, e *models.Envir
 	if err := c.cs.CoreV1().Pods(e.Namespace).Delete(ctx, e.PodName, metav1.DeleteOptions{}); err != nil && !apierrors.IsNotFound(err) {
 		errs = append(errs, "pod: "+err.Error())
 	}
-	for _, name := range []string{e.PodName + "-ssh", e.PodName + "-novnc"} {
+	// e.PodName 是 headless Service（主机名解析），另外两个是 NodePort。
+	for _, name := range []string{e.PodName, e.PodName + "-ssh", e.PodName + "-novnc"} {
 		if err := c.cs.CoreV1().Services(e.Namespace).Delete(ctx, name, metav1.DeleteOptions{}); err != nil && !apierrors.IsNotFound(err) {
 			errs = append(errs, "service "+name+": "+err.Error())
 		}

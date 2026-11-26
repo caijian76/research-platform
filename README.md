@@ -291,6 +291,7 @@ kubectl -n research-system rollout restart deployment/research-platform
 - **规格**：创建时只校验单个环境的 CPU/内存不超过个人上限、全部环境存储合计不超过个人与单位上限；不考虑当前运行中 Pod 的 CPU/内存用量。启动时才校验运行中合计是否超过个人与单位上限。
 - **大SHM**：内存配置右侧可开启「大shm」并填写 MiB 大小（不能超过内存的 1/2）。开启后创建 Pod 时会挂载 `medium: Memory` 的 emptyDir 到 `/dev/shm`，`sizeLimit` 为填写值；写入 SHM 的内容占用容器内存，过大可能导致 OOM。
 - **默认状态**：创建后环境为「已停止」，仅创建 RootPV PVC（如适用）与数据库记录，不创建 Pod/Service；需在列表中点击「启动」后连接使用。
+- **环境互访**：启动时会额外创建一个与主机名同名的 headless Service（`clusterIP: None`），同一单位（命名空间）内的其他环境可直接用主机名互访，例如在 `test2` 中 `ping test1`、`ssh test1`、`curl http://test1:8080`。跨单位需要带命名空间：`ping test1.research-unit-yf`。注意不能拿 `<名>-ssh` 这类 NodePort/ClusterIP Service 做 ICMP —— 发往 ClusterIP 的 ICMP 不会被 kube-proxy 转发，会返回 `Destination Port Unreachable`。
 - 每次打开新建对话框都会重新拉取额度，新建/停止/启动/删除后"运行中 CPU/内存"和"已分配存储"会实时更新。
 
 ### 编辑科研环境
