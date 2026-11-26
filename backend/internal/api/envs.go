@@ -759,7 +759,7 @@ func (s *Server) checkRunningCapacity(ctx context.Context, env *models.Environme
 		return err
 	}
 	if unitUsage.CPUMilli+env.CPUMilli > unit.CPUMilli || unitUsage.MemMi+env.MemMi > unit.MemMi {
-		return fmt.Errorf("运行中的 CPU / 内存将超出单位的资源上限，请先停止其他环境")
+		return fmt.Errorf("运行中的 CPU / 内存将超出单位的资源上限，请联系单位系统管理员，停止其他环境")
 	}
 	return nil
 }
