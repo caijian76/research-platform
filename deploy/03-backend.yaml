@@ -20,7 +20,7 @@ spec:
       containers:
         - name: server
           # 版本标签由 CI 在打 tag / 发 Release 时产出，内容不可变，用 IfNotPresent 即可。
-          image: ghcr.io/caijian76/research-platform-backend:0.2.2
+          image: ghcr.io/caijian76/research-platform-backend:0.2.3
           imagePullPolicy: IfNotPresent
           envFrom:
             - configMapRef:
