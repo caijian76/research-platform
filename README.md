@@ -176,21 +176,23 @@ http://<NodeIP>:30080
 
 > 生产环境请立即修改 `deploy/02-secrets-config.yaml` 中的 `ADMIN_PASSWORD`、`JWT_SECRET`、`SECRET_KEY`、`POSTGRES_PASSWORD` 后再首次部署，并在平台内修改管理员密码。
 
-### CI：预发布镜像
+### CI：发布镜像
 
-`.github/workflows/build-pre-release.yml` 在推送时自动构建 **linux/amd64 + linux/arm64** 多架构镜像并推送到 GHCR。
+`.github/workflows/release-image.yml` 在**打 tag 或发布 Release** 时构建 **linux/amd64 + linux/arm64** 多架构镜像并推送到 GHCR。普通 push（含 `main`）与 PR 一律不触发。
 
 | 触发 | 产出标签 |
 |---|---|
-| push 到 `main` | `edge`、`main`、`sha-<7位>` |
-| push 标签 `v1.2.3-rc1` | `1.2.3-rc1`、`1.2`、`sha-<7位>` |
-| 手动触发（Actions → Run workflow） | 自定义标签，默认 `edge` |
+| push 标签 `v1.2.3` | `1.2.3`、`1.2`、`sha-<7位>` |
+| 发布 Release（published） | `1.2.3`、`1.2`、`latest`、`sha-<7位>` |
+| 手动触发（Actions → Run workflow） | 自定义标签；留空则只出 `sha-<7位>` |
 
-镜像地址：`ghcr.io/caijian76/research-platform-backend`。预发布构建**不产出 `latest`**（`flavor: latest=false`），避免预发布镜像覆盖正式版本。
+镜像地址：`ghcr.io/caijian76/research-platform-backend`。`latest` 仅由 Release 事件产出，tag 推送与手动触发都不会覆盖它。在 GitHub 上新建 tag 并同时发布 Release 会触发两个事件，`concurrency` 会让后一个取消前一个，最终只成功构建一次。
 
 构建使用 `images/backend/Containerfile.multiarch`：自包含多阶段构建（Node 出前端 → Go 交叉编译 → alpine 运行），构建上下文为仓库根目录，`node_modules`、`backend/web`、`dist` 等由 `.dockerignore` 排除。本地 `scripts/build.sh`（podman + `ctr` 导入）继续使用 `images/backend/Containerfile`，两者修改基础镜像时需同步。
 
-本仓库的容器包为 **public**，集群可匿名拉取，无需 `imagePullSecrets`。`deploy/03-backend.yaml` 已直接指向 `ghcr.io/caijian76/research-platform-backend:edge`，并使用 `imagePullPolicy: Always`（`edge` 是可变标签，用 `IfNotPresent` 会导致节点继续使用旧镜像）。改用 `sha-<提交>` 或 `@sha256:<digest>` 这类不可变引用时，可改回 `IfNotPresent`。
+本仓库的容器包为 **public**，集群可匿名拉取，无需 `imagePullSecrets`。
+
+镜像标签的用途：`latest` 与 `1.2.3` / `1.2` 这类标签只在发版时产生，适合稳定部署；`sha-<提交>` 不可变，适合精确回溯。旧的 `edge` / `main` 标签来自先前"每次 push 都构建"的配置，**已停止更新**——`deploy/03-backend.yaml` 目前仍指向 `:edge`，下次发版后应改为版本标签（此时 `imagePullPolicy` 可视情况改回 `IfNotPresent`）。
 
 > 若把包可见性改为 Private，才需要创建 pull secret：`kubectl -n research-system create secret docker-registry ghcr-pull --docker-server=ghcr.io --docker-username=<GitHub 用户名> --docker-password=<带 read:packages 权限的 PAT>`，并在清单中补 `imagePullSecrets: [{name: ghcr-pull}]`。
 

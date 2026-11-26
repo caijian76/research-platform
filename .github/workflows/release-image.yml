@@ -1,19 +1,26 @@
-name: build-pre-release
+name: release-image
 
-# 预发布镜像：不产出 latest，只产出可追溯的预发布标签。
-#   push 到 main        -> edge, main, sha-<7位>
-#   push 标签 v1.2.3-rc1 -> 1.2.3-rc1, 1.2, sha-<7位>
-#   手动触发             -> 自定义标签（默认 edge）
+# 只在打 tag 或发布 Release 时构建镜像。
+# 普通 push（含 main）和 PR 一律不触发，节省 CI 时间与 registry 存储。
+#
+#   push tag v1.2.3     -> 1.2.3, 1.2, sha-<7位>
+#   Release published   -> 1.2.3, 1.2, latest, sha-<7位>
+#   手动触发            -> 自定义标签（留空则只出 sha-<7位>）
+#
+# 注意：在 GitHub 上新建 tag 并同时发布 Release，会产生 tag push 与
+# release published 两个事件；下面的 concurrency 会让后一个取消前一个，
+# 最终只成功构建一次。
 on:
   push:
-    branches: [main]
     tags: ['v*']
+  release:
+    types: [published]
   workflow_dispatch:
     inputs:
       tag:
-        description: '镜像标签（建议 edge / rc-日期 / rc-版本）'
+        description: '镜像标签（留空则只产出 sha-<short>）'
         required: false
-        default: edge
+        default: ''
         type: string
       platforms:
         description: '目标平台，逗号分隔'
@@ -22,7 +29,7 @@ on:
         type: string
 
 concurrency:
-  group: build-pre-release-${{ github.ref }}
+  group: release-image-${{ github.ref }}
   cancel-in-progress: true
 
 env:
@@ -98,20 +105,21 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          # 预发布不覆盖 latest；将来需要正式发布时改成 auto
+          # latest 只由下面的 raw 规则在 Release 时显式产出
           flavor: |
             latest=false
           tags: |
             type=sha,format=short,prefix=sha-
-            type=ref,event=branch,enable=${{ github.event_name == 'push' }}
-            type=semver,pattern={{version}},enable=${{ startsWith(github.ref, 'refs/tags/v') }}
-            type=semver,pattern={{major}}.{{minor}},enable=${{ startsWith(github.ref, 'refs/tags/v') }}
-            type=raw,value=edge,enable=${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
-            type=raw,value=${{ inputs.tag }},enable=${{ github.event_name == 'workflow_dispatch' }}
+            type=ref,event=tag,enable=${{ github.event_name == 'push' || github.event_name == 'release' }}
+            type=semver,pattern={{version}},enable=${{ startsWith(github.ref, 'refs/tags/') }}
+            type=semver,pattern={{major}}.{{minor}},enable=${{ startsWith(github.ref, 'refs/tags/') }}
+            type=raw,value=latest,enable=${{ github.event_name == 'release' }}
+            type=raw,value=${{ inputs.tag }},enable=${{ github.event_name == 'workflow_dispatch' && inputs.tag != '' }}
           labels: |
             org.opencontainers.image.title=research-platform-backend
-            org.opencontainers.image.description=科研云平台后端（预发布构建）
+            org.opencontainers.image.description=科研云平台后端
             org.opencontainers.image.vendor=research-platform
+            org.opencontainers.image.version=${{ github.ref_name }}
 
       - name: 构建并推送
         id: build
@@ -135,10 +143,11 @@ jobs:
       - name: 写入任务摘要
         run: |
           {
-            echo "### 预发布镜像已推送"
+            echo "### 镜像已推送"
             echo
             echo "| 项 | 值 |"
             echo "| --- | --- |"
+            echo "| 触发 | \`${{ github.event_name }}\` / \`${{ github.ref_name }}\` |"
             echo "| 镜像 | \`${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}\` |"
             echo "| 平台 | \`${{ inputs.platforms || env.DEFAULT_PLATFORMS }}\` |"
             echo "| Digest | \`${{ steps.build.outputs.digest }}\` |"
