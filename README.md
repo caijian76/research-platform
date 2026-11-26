@@ -186,20 +186,13 @@ http://<NodeIP>:30080
 | push 标签 `v1.2.3-rc1` | `1.2.3-rc1`、`1.2`、`sha-<7位>` |
 | 手动触发（Actions → Run workflow） | 自定义标签，默认 `edge` |
 
-镜像地址：`ghcr.io/<owner>/research-platform-backend`。预发布构建**不产出 `latest`**（`flavor: latest=false`），避免预发布镜像覆盖正式版本。
+镜像地址：`ghcr.io/caijian76/research-platform-backend`。预发布构建**不产出 `latest`**（`flavor: latest=false`），避免预发布镜像覆盖正式版本。
 
 构建使用 `images/backend/Containerfile.multiarch`：自包含多阶段构建（Node 出前端 → Go 交叉编译 → alpine 运行），构建上下文为仓库根目录，`node_modules`、`backend/web`、`dist` 等由 `.dockerignore` 排除。本地 `scripts/build.sh`（podman + `ctr` 导入）继续使用 `images/backend/Containerfile`，两者修改基础镜像时需同步。
 
-GHCR 镜像默认私有，集群拉取前需要创建 pull secret：
+本仓库的容器包为 **public**，集群可匿名拉取，无需 `imagePullSecrets`。`deploy/03-backend.yaml` 已直接指向 `ghcr.io/caijian76/research-platform-backend:edge`，并使用 `imagePullPolicy: Always`（`edge` 是可变标签，用 `IfNotPresent` 会导致节点继续使用旧镜像）。改用 `sha-<提交>` 或 `@sha256:<digest>` 这类不可变引用时，可改回 `IfNotPresent`。
 
-```bash
-kubectl -n research-system create secret docker-registry ghcr-pull \
-  --docker-server=ghcr.io \
-  --docker-username=<GitHub 用户名> \
-  --docker-password=<带 read:packages 权限的 PAT>
-```
-
-然后在 `deploy/03-backend.yaml` 的 Pod spec 中加上 `imagePullSecrets: [{name: ghcr-pull}]`，并把 `image` 指向 `ghcr.io/<owner>/research-platform-backend:<tag>`。
+> 若把包可见性改为 Private，才需要创建 pull secret：`kubectl -n research-system create secret docker-registry ghcr-pull --docker-server=ghcr.io --docker-username=<GitHub 用户名> --docker-password=<带 read:packages 权限的 PAT>`，并在清单中补 `imagePullSecrets: [{name: ghcr-pull}]`。
 
 ### 冒烟测试
 
