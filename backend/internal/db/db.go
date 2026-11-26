@@ -128,6 +128,8 @@ CREATE TABLE IF NOT EXISTS environments (
 );
 CREATE INDEX IF NOT EXISTS idx_env_unit ON environments(unit_id);
 CREATE INDEX IF NOT EXISTS idx_env_user ON environments(user_id);
+-- 主机名即 Pod 名称，同一命名空间（二级单位）内不允许重名
+CREATE UNIQUE INDEX IF NOT EXISTS idx_env_pod_name ON environments(namespace, pod_name);
 CREATE TABLE IF NOT EXISTS env_ports (
 	id BIGSERIAL PRIMARY KEY,
 	env_id BIGINT NOT NULL REFERENCES environments(id) ON DELETE CASCADE,
@@ -646,6 +648,15 @@ func (d *DB) CreateEnvironment(ctx context.Context, e *models.Environment) (*mod
 
 func (d *DB) GetEnvironment(ctx context.Context, id int64) (*models.Environment, error) {
 	return scanEnv(d.pool.QueryRow(ctx, `SELECT `+envCols+` FROM environments WHERE id=$1`, id))
+}
+
+// EnvironmentExistsByPodName 判断同一命名空间下是否已存在同名主机（Pod 名称）。
+func (d *DB) EnvironmentExistsByPodName(ctx context.Context, namespace, podName string) (bool, error) {
+	var exists bool
+	err := d.pool.QueryRow(ctx,
+		`SELECT EXISTS(SELECT 1 FROM environments WHERE namespace=$1 AND pod_name=$2)`,
+		namespace, podName).Scan(&exists)
+	return exists, err
 }
 
 func (d *DB) ListEnvironments(ctx context.Context, unitID, userID int64) ([]models.Environment, error) {

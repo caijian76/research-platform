@@ -348,6 +348,22 @@ func (c *Client) buildPod(e *models.Environment, sshPassword, vncPassword string
 	return pod
 }
 
+// EnvironmentNameTaken 检查命名空间里是否已有同名 Pod 或 RootPV 的 PVC。
+// 用于在创建环境前拦下「主机名在集群中已被占用」的情况，避免直接抛 AlreadyExists。
+func (c *Client) EnvironmentNameTaken(ctx context.Context, namespace, podName string) (bool, error) {
+	if _, err := c.cs.CoreV1().Pods(namespace).Get(ctx, podName, metav1.GetOptions{}); err == nil {
+		return true, nil
+	} else if !apierrors.IsNotFound(err) {
+		return false, err
+	}
+	if _, err := c.cs.CoreV1().PersistentVolumeClaims(namespace).Get(ctx, podName+"-rootfs", metav1.GetOptions{}); err == nil {
+		return true, nil
+	} else if !apierrors.IsNotFound(err) {
+		return false, err
+	}
+	return false, nil
+}
+
 // CreateEnvironment provisions the persistent volume for a new environment.
 // The Pod and Services are only created when the environment is started.
 func (c *Client) CreateEnvironment(ctx context.Context, e *models.Environment, sshPassword, vncPassword string) (int32, int32, error) {

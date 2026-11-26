@@ -1,7 +1,7 @@
 <template>
   <div>
     <el-table :data="envs" v-loading="loading">
-      <el-table-column label="环境" min-width="190">
+      <el-table-column label="主机名称" min-width="190">
         <template #default="{ row }">
           <div style="font-weight: 600">{{ row.name }}</div>
           <div class="small muted">{{ row.template_name || row.image }}</div>
@@ -77,8 +77,11 @@
           <el-tag size="small" :type="editingRow.rootpv ? 'success' : 'info'">{{ editingRow.rootpv ? '持久化' : '临时' }}</el-tag>
           <span class="small muted" style="margin-left: 8px">创建后不可修改</span>
         </el-form-item>
-        <el-form-item label="环境名称">
-          <el-input v-model="form.name" maxlength="64" placeholder="可选，例如 分子动力学实验" />
+        <el-form-item label="主机名称">
+          <el-input :model-value="editingRow.name" disabled />
+          <div class="small muted" style="width: 100%; margin-top: 4px">
+            即容器主机名（Pod 名称），创建后不可修改；如需更换请新建环境
+          </div>
         </el-form-item>
         <el-form-item label="root 密码">
           <el-input v-model="form.root_password" type="password" show-password maxlength="64"
@@ -312,7 +315,7 @@ async function saveEdit() {
   saving.value = true
   try {
     await api.patch(`/environments/${row.id}`, {
-      name: form.name,
+      name: row.name,
       cpu_milli: cpu,
       mem_mi: mem,
       storage_gi: storage,

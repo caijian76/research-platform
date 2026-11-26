@@ -22,7 +22,7 @@
     </div>
 
     <el-dialog v-model="createDialog" title="新建科研环境" width="580px" destroy-on-close>
-      <el-form :model="form" label-width="100px">
+      <el-form ref="formRef" :model="form" :rules="rules" label-width="100px">
         <div v-if="selectedQuota" class="quota-hint">
           资源配额：CPU {{ cpuCores(selectedQuota.cpu) }} 核 · 内存 {{ memGiB(selectedQuota.mem) }} GiB · 存储 {{ gi(selectedQuota.storage) }} GiB
           <span class="muted">（运行中已用 CPU {{ cpuCores(selectedQuota.used_cpu) }} 核 / 内存 {{ memGiB(selectedQuota.used_mem) }} GiB；全部环境已分配存储 {{ gi(selectedQuota.used_storage) }} GiB）</span>
@@ -65,8 +65,12 @@
               : '根目录随 Pod 生命周期，删除环境后数据不保留，不占用存储配额' }}
           </div>
         </el-form-item>
-        <el-form-item label="环境名称">
-          <el-input v-model="form.name" maxlength="64" placeholder="可选，例如 分子动力学实验" />
+        <el-form-item label="主机名称" prop="name">
+          <el-input v-model="form.name" maxlength="48" placeholder="留空自动生成" />
+          <div class="small muted" style="width: 100%; margin-top: 4px">
+            即容器主机名（Pod 名称）：只能用小写字母、数字和连字符，以字母或数字开头结尾，最长 48 位，创建后不可修改。
+            留空将按「{{ defaultHostnameHint }}」生成；同一单位内不允许重名。
+          </div>
         </el-form-item>
         <el-form-item label="root 密码">
           <el-input v-model="form.root_password" type="password" show-password maxlength="64"
@@ -143,6 +147,32 @@ const form = reactive({
   unit_id: null, template_id: null, name: '', cpu_cores: 2, mem_gib: 4, storage_gib: 10,
   root_password: '', graphical: true, vnc_password: '', shm_enabled: false, shm_mi: 1024, rootpv: true
 })
+
+// 主机名 = K8s Pod 名称，需符合 DNS-1123 label；后端最长 48（要给 -rootfs / -novnc 等后缀留余量）
+const formRef = ref(null)
+const HOSTNAME_RE = /^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/
+const defaultHostnameHint = computed(() => `${(auth.user?.username || 'user').toLowerCase()}-xxxxx`)
+const rules = {
+  name: [{
+    validator: (rule, value, callback) => {
+      const v = (value || '').trim()
+      if (!v) {
+        callback()
+        return
+      }
+      if (v.length > 48) {
+        callback(new Error('主机名称最长 48 个字符'))
+        return
+      }
+      if (!HOSTNAME_RE.test(v)) {
+        callback(new Error('只能使用小写字母、数字和连字符，且需以字母或数字开头结尾'))
+        return
+      }
+      callback()
+    },
+    trigger: 'blur'
+  }]
+}
 
 const shmMaxMi = computed(() => Math.max(1, Math.floor(Number(form.mem_gib || 0) * 512)))
 watch(() => form.mem_gib, () => {
@@ -260,6 +290,13 @@ function applyTemplateDefaults() {
 }
 
 async function create() {
+  if (formRef.value) {
+    try {
+      await formRef.value.validate()
+    } catch {
+      return
+    }
+  }
   if (!form.unit_id || !form.template_id) {
     ElMessage.warning('请选择单位和模板')
     return
@@ -318,7 +355,7 @@ async function create() {
   creating.value = true
   try {
     await api.post('/environments', {
-      name: form.name,
+      name: form.name.trim(),
       cpu_milli: cpu,
       mem_mi: mem,
       storage_gi: storage,

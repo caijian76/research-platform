@@ -244,16 +244,47 @@ func (s *Server) handleCreateEnvironment(w http.ResponseWriter, r *http.Request,
 		return
 	}
 
-	name := strings.TrimSpace(req.Name)
-	if name == "" {
-		name = unit.Name + " 科研环境"
-	}
-	if len([]rune(name)) > 64 {
-		writeError(w, http.StatusBadRequest, "环境名称过长")
+	hostname := strings.TrimSpace(req.Name)
+	if err := validateHostname(hostname); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	suffix := auth.RandomSuffix(8)
-	podName := "ws-" + suffix
+	// 主机名直接作为 Pod 名称，同单位（命名空间）内不允许重名。
+	podName := hostname
+	if hostname == "" {
+		// 留空：按「用户名-5 位 hash」生成；撞名则重新生成，最多尝试 5 次。
+		for attempt := 0; ; attempt++ {
+			podName = defaultHostname(u.Username)
+			taken, err := s.db.EnvironmentExistsByPodName(r.Context(), unit.Namespace, podName)
+			if err != nil {
+				writeError(w, http.StatusInternalServerError, err.Error())
+				return
+			}
+			if !taken {
+				break
+			}
+			if attempt >= 4 {
+				writeError(w, http.StatusConflict, "自动生成主机名多次冲突，请手动填写主机名称")
+				return
+			}
+		}
+	} else {
+		taken, err := s.db.EnvironmentExistsByPodName(r.Context(), unit.Namespace, podName)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		if taken {
+			writeError(w, http.StatusConflict, "该单位下已存在同名主机「"+podName+"」，请更换主机名称")
+			return
+		}
+		// 集群里可能留有同名资源（例如记录被手工删除过），提前拦下，避免直接报 AlreadyExists。
+		if exists, err := s.kube.EnvironmentNameTaken(r.Context(), unit.Namespace, podName); err == nil && exists {
+			writeError(w, http.StatusConflict, "该单位集群中已存在同名资源「"+podName+"」，请更换主机名称或联系管理员清理")
+			return
+		}
+	}
+	name := podName
 	graphical := true
 	if req.Graphical != nil {
 		graphical = *req.Graphical
@@ -414,14 +445,12 @@ func (s *Server) handleUpdateEnvironment(w http.ResponseWriter, r *http.Request,
 		writeError(w, http.StatusBadRequest, "环境根文件系统模式创建后不可修改")
 		return
 	}
-	name := strings.TrimSpace(req.Name)
-	if name == "" {
-		name = env.Name
-	}
-	if len([]rune(name)) > 64 {
-		writeError(w, http.StatusBadRequest, "环境名称过长")
+	// 主机名即 Pod 名称，K8s 资源创建后无法改名，因此这里只接受原值。
+	if n := strings.TrimSpace(req.Name); n != "" && n != env.Name {
+		writeError(w, http.StatusBadRequest, "主机名称创建后不可修改，如需更换请新建环境")
 		return
 	}
+	name := env.Name
 	if req.CPUMilli <= 0 || req.MemMi <= 0 {
 		writeError(w, http.StatusBadRequest, "CPU / 内存必须大于 0")
 		return
