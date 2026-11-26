@@ -457,14 +457,10 @@ func (c *Client) ensureHeadlessService(ctx context.Context, e *models.Environmen
 		Spec: corev1.ServiceSpec{
 			ClusterIP: corev1.ClusterIPNone,
 			Selector:  map[string]string{EnvLabel: e.PodName},
-			// 端口仅用于满足 Service 校验，域名解析与 ICMP 不依赖它。
+			// 不声明 ports：headless Service 只负责让 DNS 返回 Pod IP，客户端连的是
+			// Pod IP + 实际端口（22 / 6080 / 业务端口都能通），声明了反而让人误以为
+			// 只有列出的端口可达。
 			PublishNotReadyAddresses: true,
-			Ports: []corev1.ServicePort{{
-				Name:       "ssh",
-				Port:       22,
-				TargetPort: intstr.FromInt32(e.SSHPort),
-				Protocol:   corev1.ProtocolTCP,
-			}},
 		},
 	}
 	if _, err := c.cs.CoreV1().Services(e.Namespace).Create(ctx, svc, metav1.CreateOptions{}); err != nil && !apierrors.IsAlreadyExists(err) {
