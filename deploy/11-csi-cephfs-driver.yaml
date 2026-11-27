@@ -1,0 +1,16 @@
+# CephFS CSI 驱动声明（ceph-csi-operator 的 Driver CR）
+# 来源：/root/rook-offline/manifests/operator.yaml.with-cephfs.bak
+# 说明：本集群用 ceph-csi-operator 管理 CSI（ROOK_CREATE_CSI_OPERATOR_RESOURCES=true），
+#       原安装清单为精简把这段 cephfs Driver 删掉了，这里按备份原样恢复。
+apiVersion: csi.ceph.io/v1
+kind: Driver
+metadata:
+  name: rook-ceph.cephfs.csi.ceph.com # csi-provisioner-name
+  namespace: rook-ceph # namespace:operator
+spec:
+  fsGroupPolicy: File
+  cephFsClientType: kernel
+  nodePlugin:
+    updateStrategy:
+      type: RollingUpdate
+  controllerPlugin: {}
