@@ -1,6 +1,6 @@
 # CephFS：启用 MDS + 文件系统 + CSI Provisioner
 # 用途：提供 ReadWriteMany 的共享文件存储（RBD 只能 RWO）
-# 说明：data pool 用 2 副本（与集群 osd_pool_default_size=2 一致），meta pool 用 3 副本
+# 说明：data pool 用 2 副本（与集群 osd_pool_default_size=2 一致），meta pool 用 2 副本
 apiVersion: ceph.rook.io/v1
 kind: CephFilesystem
 metadata:
@@ -10,12 +10,11 @@ spec:
   metadataPool:
     failureDomain: host
     replicated:
-      size: 3
+      size: 2
   dataPools:
     - failureDomain: host
       replicated:
         size: 2
-  preserveFilesystemOnDelete: true
   metadataServer:
     activeCount: 1
     activeStandby: true
